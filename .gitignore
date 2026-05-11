@@ -1,0 +1,8 @@
+node_modules/
+.env
+rescued_firing.json
+server/data/settings.json
+server/data/records.json
+server/data/thermal_profile_pi.json
+server/data/thermal_profile.json
+*.log

@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Calciforge — Magical Kiln</title>
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+  
+  <link rel="stylesheet" href="calciforge.css" />
+</head>
+<body>
+
+<!-- SVG Gradients -->
+<svg class="svg-defs">
+  <defs>
+    <linearGradient id="flameGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffb347"/>
+      <stop offset="50%" stop-color="#ff6b35"/>
+      <stop offset="100%" stop-color="#ff416c"/>
+    </linearGradient>
+  </defs>
+</svg>
+
+<div class="shooting-stars">
+  <div class="star"></div>
+  <div class="star"></div>
+  <div class="star"></div>
+</div>
+
+<div class="app-wrapper">
+  <!-- ===== SIDEBAR NAVIGATION ===== -->
+  <aside class="app-sidebar">
+    <div class="brand-header">
+      <img src="assets/calcifer_icon.png" alt="Calcifer Icon" class="calcifer-logo" />
+      <div class="brand-info">
+        <span class="brand-name">Calciforge</span>
+        <span class="brand-sub">Magical Kiln</span>
+      </div>
+    </div>
+
+    <nav class="tab-nav" role="tablist">
+      <button class="tab-btn active" data-tab="dashboard" role="tab" aria-selected="true" id="tab-dashboard">
+        <svg viewBox="0 0 20 20" fill="currentColor"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zm6-4a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zm6-3a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"/></svg>
+        Overview
+      </button>
+      <button class="tab-btn" data-tab="schedules" role="tab" aria-selected="false" id="tab-schedules">
+        <svg viewBox="0 0 20 20" fill="currentColor"><path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/><path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clip-rule="evenodd"/></svg>
+        Spellbooks
+      </button>
+      <button class="tab-btn" data-tab="records" role="tab" aria-selected="false" id="tab-records">
+        <svg viewBox="0 0 20 20" fill="currentColor"><path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zm0 6a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1v-2zm0 6a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1v-2z"/></svg>
+        Ledgers
+      </button>
+      <button class="tab-btn" data-tab="settings" role="tab" aria-selected="false" id="tab-settings">
+        <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/></svg>
+        Enchantments
+      </button>
+    </nav>
+
+    <div class="header-status">
+      <div class="connection-badge" id="ws-badge">
+        <span class="badge-dot"></span>
+        <span class="badge-label">Calling magic...</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ===== MAIN CONTENT ===== -->
+  <main class="app-main">
+
+    <!-- ========== DASHBOARD ========== -->
+    <section class="tab-panel active" id="panel-dashboard">
+
+      <!-- Kiln state hero glass -->
+      <div class="kiln-hero-glass glass-panel" id="kiln-hero">
+        <div class="hearth-center">
+          <img src="assets/calcifer_icon.png" class="calcifer-reactor" alt="Calcifer Reactor" />
+          <svg class="temp-gauge" viewBox="0 0 240 240" id="gauge-svg">
+            <path class="gauge-track" d="M 30 200 A 100 100 0 1 1 210 200" fill="none" stroke-width="6" stroke-linecap="round"/>
+            <path class="gauge-fill" id="gauge-arc" d="M 30 200 A 100 100 0 0 1 30 200" fill="none" stroke-width="12" stroke-linecap="round"/>
+            <!-- Center text moved to top inside SVG so it doesn't cover calcifer entirely -->
+            <text class="gauge-temp" id="gauge-temp-text" x="120" y="55" text-anchor="middle">72°F</text>
+            <text class="gauge-label" x="120" y="80" text-anchor="middle">HEARTH TEMP</text>
+            <text class="gauge-minmax" x="35" y="220" text-anchor="middle">0°</text>
+            <text class="gauge-minmax" x="205" y="220" text-anchor="middle">2500°</text>
+          </svg>
+        </div>
+
+        <div class="hero-info-glass">
+          <div class="kiln-state-badge state-idle" id="kiln-state-badge">
+            <span class="state-dot"></span>
+            <span id="kiln-state-label">SLEEPING</span>
+          </div>
+
+          <div class="hero-meta-grid">
+            <div class="meta-item-glass">
+              <span class="meta-label">Schedule</span>
+              <span class="meta-value" id="active-schedule-name">—</span>
+            </div>
+            <div class="meta-item-glass">
+              <span class="meta-label">Current Step</span>
+              <span class="meta-value" id="active-step-label">—</span>
+            </div>
+            <div class="meta-item-glass">
+              <span class="meta-label">Step Progress</span>
+              <span class="meta-value" id="active-step-progress">—</span>
+            </div>
+            <div class="meta-item-glass">
+              <span class="meta-label">Elapsed Time</span>
+              <span class="meta-value mono" id="elapsed-time">—</span>
+            </div>
+            <div class="meta-item-glass" style="grid-column: span 2;">
+              <span class="meta-label">Projected End</span>
+              <span class="meta-value" id="projected-end">—</span>
+            </div>
+          </div>
+
+          <div class="hero-controls">
+            <select class="schedule-select" id="start-schedule-select">
+              <option value="">Select a spellbook...</option>
+            </select>
+            <select class="schedule-select hidden" id="start-step-select" style="max-width: 140px;">
+              <option value="0">Start at Step 1</option>
+            </select>
+            <button class="btn btn-fire" id="btn-start-fire" disabled>
+              Ignite Hearth
+            </button>
+            <button class="btn btn-stop hidden" id="btn-stop-fire">
+              Extinguish
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stats Grid -->
+      <div class="stats-grid">
+        <div class="stat-card-glass" id="card-ambient">
+          <div class="stat-icon">🌙</div>
+          <div class="stat-body">
+            <div class="stat-label">Vale Temp</div>
+            <div class="stat-value" id="stat-ambient">—</div>
+            <div class="stat-sub" id="stat-location">Peering into the mist…</div>
+          </div>
+        </div>
+        <div class="stat-card-glass" id="card-humidity">
+          <div class="stat-icon">💧</div>
+          <div class="stat-body">
+            <div class="stat-label">Humidity</div>
+            <div class="stat-value" id="stat-humidity">—</div>
+            <div class="stat-sub">Outdoor moisture</div>
+          </div>
+        </div>
+        <div class="stat-card-glass" id="card-power">
+          <div class="stat-icon">⚡</div>
+          <div class="stat-body">
+            <div class="stat-label">Magic Draw</div>
+            <div class="stat-value" id="stat-watts">—</div>
+            <div class="stat-sub" id="stat-watts-source">Via Emporia</div>
+          </div>
+        </div>
+        <div class="stat-card-glass" id="card-virtual-cone" style="border-color: var(--molten);">
+          <div class="stat-icon" style="color: var(--molten);">🔥</div>
+          <div class="stat-body">
+            <div class="stat-label" style="color: var(--molten);">Virtual Cone</div>
+            <div class="stat-value" id="stat-virtual-cone-name">—</div>
+            <div class="stat-sub" id="stat-virtual-cone-score">Soul count: 0</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step progress container -->
+      <div class="step-progress-container" id="step-progress-container" style="display:none">
+        <div class="step-progress-header">
+          <span class="step-progress-title">Incantation Progress</span>
+          <span class="step-progress-count" id="step-progress-count"></span>
+        </div>
+        <div class="step-track" id="step-track"></div>
+      </div>
+
+      <!-- Charts -->
+      <div class="chart-card-glass">
+        <div class="chart-header">
+          <h3 class="chart-title">Heat Timeline</h3>
+          <div class="chart-legend">
+            <span class="legend-item kiln-color">● Hearth</span>
+            <span class="legend-item ambient-color">- - Destiny</span>
+          </div>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="temp-chart"></canvas>
+        </div>
+      </div>
+
+      <div class="chart-card-glass" id="firing-overview-card">
+        <div class="chart-header">
+          <h3 class="chart-title">Grand Ritual Overview</h3>
+          <div class="chart-legend">
+            <span class="legend-item kiln-color">● Present</span>
+            <span class="legend-item ambient-color">- - Prophecy</span>
+          </div>
+        </div>
+        <div class="chart-wrap" style="height:160px;">
+          <canvas id="firing-overview-chart"></canvas>
+        </div>
+        <div id="firing-overview-placeholder" style="text-align:center; color:var(--text-muted); font-size:0.8rem; padding:2rem 0; display:none;">
+          Cast a spell to view the prophecy
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ========== SCHEDULES DASHBOARD ========== -->
+    <section class="tab-panel" id="panel-schedules">
+      <div class="panel-header">
+        <h2>Spellbooks</h2>
+        <button class="btn btn-primary" id="btn-new-schedule">
+           Inscribe New Ritual
+        </button>
+      </div>
+      <div class="schedules-grid" id="schedules-grid">
+        <div class="loading-state">Consulting library…</div>
+      </div>
+    </section>
+
+    <!-- ========== RECORDS ========== -->
+    <section class="tab-panel" id="panel-records">
+      <div class="panel-header">
+        <h2>Ledgers of Ash</h2>
+        <span class="records-count" id="records-count">0 firings</span>
+      </div>
+      <div class="records-table-wrap">
+        <table class="records-table" id="records-table">
+          <thead>
+            <tr>
+              <th class="sortable" data-col="startTime">Date ↕</th>
+              <th>Ritual Name</th>
+              <th class="sortable" data-col="peakTempF">Peak °F ↕</th>
+              <th class="sortable" data-col="duration">Duration ↕</th>
+              <th class="sortable" data-col="totalKWh">Power ↕</th>
+              <th class="sortable" data-col="totalCost">Tithe ($) ↕</th>
+              <th>Moisture</th>
+              <th>Vale °F</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="records-tbody">
+            <tr><td colspan="9" class="empty-state" style="text-align:center;">The ledger is empty.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ========== SETTINGS ========== -->
+    <section class="tab-panel" id="panel-settings">
+      <div class="panel-header">
+        <h2>Enchantments & Wards</h2>
+      </div>
+
+      <div class="settings-grid">
+        <div class="settings-card glass-panel">
+          <h3 class="settings-card-title">📍 Star Map (Location)</h3>
+          <p class="settings-desc">Your realm's location for accurate atmospheric tracking via Open-Meteo.</p>
+          <div class="form-row">
+            <label class="form-label">City, State or Zip</label>
+            <input class="form-input" id="set-location-query" type="text" placeholder="e.g. Market Chipping" />
+          </div>
+          <div class="sensor-info-row" style="margin-top:0.5rem;">
+            <span class="info-label" style="font-size:0.8rem; color: #fff;">Realm Found:</span>
+            <span class="info-value" id="info-location-name" style="font-size:0.8rem; color:var(--brand);">—</span>
+          </div>
+          <button class="btn btn-primary" id="btn-save-location" style="margin-top:1rem;">Bind Location</button>
+        </div>
+
+        <div class="settings-card glass-panel">
+          <h3 class="settings-card-title">⚡ Tithes & Power</h3>
+          <p class="settings-desc">Calculations for your magic energy expense.</p>
+          <div class="form-row">
+            <label class="form-label">Energy Rate ($/kWh)</label>
+            <input class="form-input" id="set-rate" type="number" step="0.001" placeholder="0.12" />
+          </div>
+          <div class="form-row">
+            <label class="form-label">Hearth Capacity (W)</label>
+            <input class="form-input" id="set-watts" type="number" step="100" placeholder="2400" />
+          </div>
+          <button class="btn btn-primary" id="btn-save-power" style="margin-top:1rem;">Inscribe Tithes</button>
+        </div>
+
+        <!-- The rest of settings elements that app.js needs -->
+        <div class="settings-card glass-panel emporia-card hidden">
+          <h3 class="settings-card-title">Emporia Hidden</h3>
+          <input class="form-input" id="set-emporia-email" type="email" />
+          <input class="form-input" id="set-emporia-password" type="password" />
+          <input class="form-input" id="set-emporia-gid" type="text" />
+          <input class="form-input" id="set-emporia-channel" type="number" />
+          <div id="emporia-status-label"></div>
+          <button id="btn-test-emporia"></button>
+          <button id="btn-save-emporia"></button>
+          <span id="info-emporia-connected"></span>
+        </div>
+
+        <div class="settings-card glass-panel">
+          <h3 class="settings-card-title">🤖 Spellcaster (AI Config)</h3>
+          <p class="settings-desc">Link a Gemini API key for cone-vision and automated ritual tuning.</p>
+          <div class="form-row">
+            <label class="form-label">Gemini API Key</label>
+            <input class="form-input" id="set-ai-api-key" type="password" placeholder="AIzaSy..." />
+          </div>
+          <button class="btn btn-primary" id="btn-save-ai" style="margin-top:1rem;">Bind Spirit</button>
+        </div>
+
+        <div class="settings-card glass-panel">
+          <h3 class="settings-card-title">🧠 Demon's Adaptive Learning</h3>
+          <p class="settings-desc">Allow Calcifer to learn how fast your hearth coasts during cooling phases.</p>
+          <div style="display:flex; align-items:center; gap:1rem; margin-top:0.5rem;">
+            <label style="display:flex; align-items:center; gap:0.6rem; cursor:pointer;">
+              <input type="checkbox" id="set-adaptive-learning" style="width:18px; height:18px;" />
+              <span>Allow Independent Thought</span>
+            </label>
+          </div>
+          <div id="adaptive-learning-status" style="font-size:0.8rem; margin-top:0.5rem; color:var(--accent);">—</div>
+          <button class="btn btn-primary" id="btn-save-adaptive" style="margin-top:0.75rem;">Command Demon</button>
+        </div>
+
+        <div class="hidden">
+           <span id="info-sensor-mode"></span>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- ===== MODALS (We keep standard ID structure for app.js) ===== -->
+<div class="modal-overlay hidden" id="schedule-modal">
+  <div class="modal" role="dialog">
+    <div class="modal-header">
+      <h2 class="modal-title" id="modal-title">New Ritual</h2>
+      <button class="modal-close" id="modal-close" aria-label="Close">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <label class="form-label">Ritual Name</label>
+        <input class="form-input" id="sched-name" type="text" placeholder="e.g. Magic Cone 6" />
+      </div>
+      <div class="form-row">
+        <label class="form-label">Incantation Detail</label>
+        <input class="form-input" id="sched-desc" type="text" placeholder="Optional" />
+      </div>
+      <div class="form-row">
+        <label class="form-label">Magic Cost (W)</label>
+        <input class="form-input" id="sched-watts" type="number" step="100" placeholder="2400" />
+      </div>
+      
+      <div class="steps-editor">
+        <div class="steps-header" style="display:flex; justify-content:space-between; margin-bottom:1rem;">
+          <span style="font-weight:bold; color:var(--brand);">Sequences</span>
+          <div style="display:flex; gap:0.5rem;">
+            <button class="btn btn-sm btn-outline" id="btn-add-ramp">+ Climb</button>
+            <button class="btn btn-sm btn-outline" id="btn-add-hold">+ Hold</button>
+          </div>
+        </div>
+        <div class="steps-list" id="steps-list"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" id="modal-cancel">Discard Draft</button>
+      <button class="btn btn-primary" id="modal-save">Inscribe</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="tuning-modal">
+  <!-- Minimally mirrored structure for app.js parsing -->
+  <div class="modal"><button id="tuning-close"></button> <strong id="tuning-sched-name"></strong> <input type="file" id="cone-file-input"> <input type="text" id="cone-target-num"> <button id="btn-analyze-cone"></button> <div id="ai-loading"></div> <div id="vision-results"><span id="res-bend"></span><span id="res-maturity"></span><div id="res-analysis"></div><div id="auto-tune-prompt-box"><span id="tuned-preview-name"></span><button id="btn-tuning-deny"></button><button id="btn-tuning-confirm"></button></div></div> <button id="btn-cancel-tuning"></button><button id="btn-apply-tuning"></button> </div>
+</div>
+
+<div class="modal-overlay" id="replay-modal" style="display:none;">
+    <div class="modal"><button onclick="closeReplayModal()">X</button><div id="replay-status"></div><canvas id="replay-chart"></canvas><div id="replay-ramp-table"></div><div id="replay-adaptive-tuning"><input type="hidden" id="tuning-record-id"><select id="tuning-physical-result"></select><button id="btn-submit-tuning"></button><div id="tuning-result-msg"></div></div></div>
+</div>
+
+<div class="modal-overlay" id="stop-confirm-modal" style="display:none;">
+  <div class="modal glass-panel" style="border-color:var(--danger);">
+    <div class="modal-header"><h2 class="modal-title" style="color:var(--danger);">⚠️ Halt Magic?</h2></div>
+    <div class="modal-body">Stopping this ritual will extinguish Calcifer immediately. Are you certain?</div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" id="stop-confirm-cancel">Mercy</button>
+      <button class="btn btn-primary" style="background:var(--danger);" id="stop-confirm-ok">🛑 Stop Magic</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toast-container"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

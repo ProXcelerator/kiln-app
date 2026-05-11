@@ -1,0 +1,237 @@
+[
+  {
+    "id": "schedule-med-bisque-06",
+    "name": "Medium Bisque (Cone 06)",
+    "kilnWatts": 2400,
+    "description": "Standard bisque firing for dry greenware",
+    "createdAt": "2026-01-01T00:00:00.000Z",
+    "steps": [
+      {
+        "id": "s1",
+        "type": "ramp",
+        "label": "Candling / Water Smoking",
+        "targetTempF": 200,
+        "ratePerHour": 80
+      },
+      {
+        "id": "s2",
+        "type": "hold",
+        "label": "Water Smoking Hold",
+        "tempF": 200,
+        "durationMinutes": 60
+      },
+      {
+        "id": "s3",
+        "type": "ramp",
+        "label": "Pre-Quartz",
+        "targetTempF": 1000,
+        "ratePerHour": 200
+      },
+      {
+        "id": "s4",
+        "type": "ramp",
+        "label": "Quartz Inversion",
+        "targetTempF": 1150,
+        "ratePerHour": 100
+      },
+      {
+        "id": "s5",
+        "type": "ramp",
+        "label": "Final Climb",
+        "targetTempF": 1828,
+        "ratePerHour": 250
+      },
+      {
+        "id": "s6",
+        "type": "hold",
+        "label": "Cone 06 Target Hold",
+        "tempF": 1828,
+        "durationMinutes": 10
+      }
+    ]
+  },
+  {
+    "id": "schedule-slow-bisque-04",
+    "name": "Slow Bisque (Cone 04)",
+    "kilnWatts": 2400,
+    "description": "Very slow bisque for thick, large, or slightly damp pieces",
+    "createdAt": "2026-01-01T00:00:00.000Z",
+    "steps": [
+      {
+        "id": "s1",
+        "type": "ramp",
+        "label": "Ultra Slow Candling",
+        "targetTempF": 205,
+        "ratePerHour": 30
+      },
+      {
+        "id": "s2",
+        "type": "hold",
+        "label": "Overnight Candling Hold",
+        "tempF": 180,
+        "durationMinutes": 180
+      },
+      {
+        "id": "s3",
+        "type": "ramp",
+        "label": "Carbon Burnout",
+        "targetTempF": 1000,
+        "ratePerHour": 150
+      },
+      {
+        "id": "s4",
+        "type": "ramp",
+        "label": "Quartz Inversion",
+        "targetTempF": 1150,
+        "ratePerHour": 90
+      },
+      {
+        "id": "s5",
+        "type": "ramp",
+        "label": "Climb",
+        "targetTempF": 1600,
+        "ratePerHour": 200
+      },
+      {
+        "id": "s6",
+        "type": "ramp",
+        "label": "Final to Cone 04",
+        "targetTempF": 1945,
+        "ratePerHour": 108
+      },
+      {
+        "id": "s7",
+        "type": "hold",
+        "label": "Cone 04 Hold",
+        "tempF": 1945,
+        "durationMinutes": 15
+      }
+    ],
+    "updatedAt": "2026-04-10T16:55:58.415Z"
+  },
+  {
+    "id": "schedule-fast-glaze-6",
+    "name": "Fast Glaze (Cone 6)",
+    "kilnWatts": 2400,
+    "description": "Quick mid-fire glaze (good for commercial and low-defect glazes)",
+    "createdAt": "2026-01-01T00:00:00.000Z",
+    "steps": [
+      {
+        "id": "s1",
+        "type": "ramp",
+        "label": "Initial Fast Climb",
+        "targetTempF": 2050,
+        "ratePerHour": 450
+      },
+      {
+        "id": "s2",
+        "type": "ramp",
+        "label": "Controlled Final Climb",
+        "targetTempF": 2232,
+        "ratePerHour": 150
+      },
+      {
+        "id": "s3",
+        "type": "hold",
+        "label": "Soak Cone 6",
+        "tempF": 2232,
+        "durationMinutes": 15
+      },
+      {
+        "id": "s4",
+        "type": "ramp",
+        "label": "Crash Cool Drop",
+        "targetTempF": 1900,
+        "ratePerHour": 9999
+      },
+      {
+        "id": "s5",
+        "type": "hold",
+        "label": "Drop & Hold (Heal pinholes)",
+        "tempF": 1900,
+        "durationMinutes": 15
+      }
+    ]
+  },
+  {
+    "id": "schedule-med-glaze-6",
+    "name": "Medium Glaze (Cone 6)",
+    "kilnWatts": 2400,
+    "description": "Standard Cone 6 glaze firing with controlled cooling",
+    "createdAt": "2026-01-01T00:00:00.000Z",
+    "steps": [
+      {
+        "id": "s1",
+        "type": "ramp",
+        "label": "Safe Climb",
+        "targetTempF": 250,
+        "ratePerHour": 150
+      },
+      {
+        "id": "s2",
+        "type": "ramp",
+        "label": "Body Climb",
+        "targetTempF": 2050,
+        "ratePerHour": 350
+      },
+      {
+        "id": "s3",
+        "type": "ramp",
+        "label": "Final Climb",
+        "targetTempF": 2232,
+        "ratePerHour": 130
+      },
+      {
+        "id": "s4",
+        "type": "hold",
+        "label": "Soak",
+        "tempF": 2232,
+        "durationMinutes": 12
+      },
+      {
+        "id": "s5",
+        "type": "ramp",
+        "label": "Controlled Cool (Matte)",
+        "targetTempF": 1900,
+        "ratePerHour": 150
+      }
+    ]
+  },
+  {
+    "id": "schedule-low-glaze-04",
+    "name": "Low-Fire Glaze (Cone 04)",
+    "kilnWatts": 2400,
+    "description": "Standard low-fire glaze (commercial earthenware glazes)",
+    "createdAt": "2026-01-01T00:00:00.000Z",
+    "steps": [
+      {
+        "id": "s1",
+        "type": "ramp",
+        "label": "Warm Up",
+        "targetTempF": 250,
+        "ratePerHour": 200
+      },
+      {
+        "id": "s2",
+        "type": "ramp",
+        "label": "Main Climb",
+        "targetTempF": 1700,
+        "ratePerHour": 400
+      },
+      {
+        "id": "s3",
+        "type": "ramp",
+        "label": "Final Slow Climb",
+        "targetTempF": 1945,
+        "ratePerHour": 120
+      },
+      {
+        "id": "s4",
+        "type": "hold",
+        "label": "Cone 04 Soak",
+        "tempF": 1945,
+        "durationMinutes": 15
+      }
+    ]
+  }
+]

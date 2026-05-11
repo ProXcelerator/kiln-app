@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KilnForge — Firing & Monitoring</title>
+  <meta name="description" content="Professional kiln firing and monitoring system. Edit schedules, track live temperature, humidity, and energy usage for ceramic firings." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<!-- ===== HEADER ===== -->
+<header class="app-header">
+  <div class="header-brand">
+    <div class="brand-icon">
+      <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M16 2C10 8 6 13 6 18c0 5.5 4.5 10 10 10s10-4.5 10-10C26 13 22 8 16 2z" fill="url(#flameGrad)"/>
+        <path d="M16 10c-2 4-3 6-3 9a3 3 0 006 0c0-3-1-5-3-9z" fill="url(#innerFlame)" opacity="0.8"/>
+        <defs>
+          <linearGradient id="flameGrad" x1="16" y1="2" x2="16" y2="28" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#ffb347"/>
+            <stop offset="60%" stop-color="#ff6b35"/>
+            <stop offset="100%" stop-color="#c0392b"/>
+          </linearGradient>
+          <linearGradient id="innerFlame" x1="16" y1="10" x2="16" y2="22" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#fff3c4"/>
+            <stop offset="100%" stop-color="#ffb347"/>
+          </linearGradient>
+        </defs>
+      </svg>
+    </div>
+    <div class="brand-text">
+      <span class="brand-name">KilnForge</span>
+      <span class="brand-sub">Firing & Monitoring System</span>
+    </div>
+  </div>
+
+  <nav class="tab-nav" role="tablist">
+    <button class="tab-btn active" data-tab="dashboard" role="tab" aria-selected="true" id="tab-dashboard">
+      <svg viewBox="0 0 20 20" fill="currentColor"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zm6-4a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zm6-3a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"/></svg>
+      Dashboard
+    </button>
+    <button class="tab-btn" data-tab="schedules" role="tab" aria-selected="false" id="tab-schedules">
+      <svg viewBox="0 0 20 20" fill="currentColor"><path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/><path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clip-rule="evenodd"/></svg>
+      Schedules
+    </button>
+    <button class="tab-btn" data-tab="records" role="tab" aria-selected="false" id="tab-records">
+      <svg viewBox="0 0 20 20" fill="currentColor"><path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zm0 6a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1v-2zm0 6a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1v-2z"/></svg>
+      Records
+    </button>
+    <button class="tab-btn" data-tab="settings" role="tab" aria-selected="false" id="tab-settings">
+      <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/></svg>
+      Settings
+    </button>
+  </nav>
+
+  <div class="header-status">
+    <div class="connection-badge" id="ws-badge">
+      <span class="badge-dot"></span>
+      <span class="badge-label">Connecting…</span>
+    </div>
+  </div>
+</header>
+
+<!-- ===== MAIN CONTENT ===== -->
+<main class="app-main">
+
+  <!-- ========== DASHBOARD ========== -->
+  <section class="tab-panel active" id="panel-dashboard">
+
+    <!-- Kiln state hero -->
+    <div class="kiln-hero" id="kiln-hero">
+      <div class="hero-gauge-wrap">
+        <svg class="temp-gauge" viewBox="0 0 240 200" id="gauge-svg">
+          <!-- Background arc -->
+          <path class="gauge-track" d="M 30 170 A 90 90 0 1 1 210 170" fill="none" stroke-width="14" stroke-linecap="round"/>
+          <!-- Value arc -->
+          <path class="gauge-fill" id="gauge-arc" d="M 30 170 A 90 90 0 0 1 30 170" fill="none" stroke-width="14" stroke-linecap="round"/>
+          <!-- Center text -->
+          <text class="gauge-temp" id="gauge-temp-text" x="120" y="145" text-anchor="middle">72°F</text>
+          <text class="gauge-label" x="120" y="168" text-anchor="middle">KILN TEMP</text>
+          <!-- Min/Max labels -->
+          <text class="gauge-minmax" x="28" y="185" text-anchor="middle">0°</text>
+          <text class="gauge-minmax" x="212" y="185" text-anchor="middle">2500°</text>
+        </svg>
+
+        <div class="kiln-state-badge" id="kiln-state-badge">
+          <span class="state-dot"></span>
+          <span id="kiln-state-label">IDLE</span>
+        </div>
+      </div>
+
+      <div class="hero-info">
+        <div class="hero-meta">
+          <div class="meta-item">
+            <span class="meta-label">Schedule</span>
+            <span class="meta-value" id="active-schedule-name">—</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Current Step</span>
+            <span class="meta-value" id="active-step-label">—</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Step Progress</span>
+            <span class="meta-value" id="active-step-progress">—</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Elapsed Time</span>
+            <span class="meta-value mono" id="elapsed-time">—</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Projected End</span>
+            <span class="meta-value" id="projected-end">—</span>
+          </div>
+        </div>
+
+        <div class="hero-controls">
+          <select class="schedule-select" id="start-schedule-select">
+            <option value="">Select a schedule…</option>
+          </select>
+          <select class="schedule-select" id="start-step-select" style="display: none; max-width: 140px;">
+            <option value="0">Start at Step 1</option>
+          </select>
+          <button class="btn btn-fire" id="btn-start-fire" disabled>
+            <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"/></svg>
+            Start Firing
+          </button>
+          <button class="btn btn-stop hidden" id="btn-stop-fire">
+            <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z" clip-rule="evenodd"/></svg>
+            Stop Firing
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stats cards row -->
+    <div class="stats-grid">
+      <div class="stat-card" id="card-ambient">
+        <div class="stat-icon">🌡️</div>
+        <div class="stat-body">
+          <div class="stat-label">Outside Temp</div>
+          <div class="stat-value" id="stat-ambient">—</div>
+          <div class="stat-sub" id="stat-location">Fetching…</div>
+        </div>
+      </div>
+      <div class="stat-card" id="card-humidity">
+        <div class="stat-icon">💧</div>
+        <div class="stat-body">
+          <div class="stat-label">Humidity</div>
+          <div class="stat-value" id="stat-humidity">—</div>
+          <div class="stat-sub">Outdoor relative humidity</div>
+        </div>
+      </div>
+      <div class="stat-card" id="card-power">
+        <div class="stat-icon">⚡</div>
+        <div class="stat-body">
+          <div class="stat-label">Power Draw</div>
+          <div class="stat-value" id="stat-watts">—</div>
+          <div class="stat-sub" id="stat-watts-source">Via Emporia Vue</div>
+        </div>
+      </div>
+      <div class="stat-card" id="card-virtual-cone" style="border: 1px solid var(--accent); background: linear-gradient(145deg, rgba(239, 68, 68, 0.05) 0%, rgba(31, 41, 55, 0) 100%);">
+        <div class="stat-icon" style="color: var(--accent);">🔥</div>
+        <div class="stat-body">
+          <div class="stat-label" style="color: var(--accent); font-weight: bold;">Virtual Cone</div>
+          <div class="stat-value" id="stat-virtual-cone-name">—</div>
+          <div class="stat-sub" id="stat-virtual-cone-score">Heat Work Score: 0</div>
+        </div>
+      </div>
+      <div class="stat-card" id="card-cost">
+        <div class="stat-icon">💰</div>
+        <div class="stat-body">
+          <div class="stat-label">Firing Cost</div>
+          <div class="stat-value" id="stat-cost">$0.00</div>
+          <div class="stat-sub" id="stat-kwh">0.000 kWh used</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step progress bar -->
+    <div class="step-progress-container" id="step-progress-container" style="display:none">
+      <div class="step-progress-header">
+        <span class="step-progress-title">Schedule Progress</span>
+        <span class="step-progress-count" id="step-progress-count"></span>
+      </div>
+      <div class="step-track" id="step-track"></div>
+    </div>
+
+    <!-- Live chart -->
+    <div class="chart-card">
+      <div class="chart-header">
+        <h3 class="chart-title">Temperature Timeline</h3>
+        <div class="chart-legend">
+          <span class="legend-item kiln-color">● Kiln Temp</span>
+          <span class="legend-item ambient-color">- - Goal Temp</span>
+        </div>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="temp-chart"></canvas>
+      </div>
+    </div>
+
+    <!-- Full firing overview chart -->
+    <div class="chart-card" id="firing-overview-card" style="margin-top:1rem;">
+      <div class="chart-header">
+        <h3 class="chart-title">Full Firing Overview</h3>
+        <div class="chart-legend">
+          <span class="legend-item kiln-color">● Actual Temp</span>
+          <span class="legend-item ambient-color">- - Planned Schedule</span>
+        </div>
+      </div>
+      <div class="chart-wrap" style="height:160px;">
+        <canvas id="firing-overview-chart"></canvas>
+      </div>
+      <div id="firing-overview-placeholder" style="text-align:center; color:var(--text-muted); font-size:0.8rem; padding:2rem 0; display:none;">
+        Start a firing to see the full schedule overview
+      </div>
+    </div>
+
+  </section>
+
+  <!-- ========== SCHEDULES ========== -->
+  <section class="tab-panel" id="panel-schedules">
+    <div class="panel-header">
+      <h2>Firing Schedules</h2>
+      <button class="btn btn-primary" id="btn-new-schedule">
+        <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/></svg>
+        New Schedule
+      </button>
+    </div>
+    <div class="schedules-grid" id="schedules-grid">
+      <div class="loading-state">Loading schedules…</div>
+    </div>
+  </section>
+
+  <!-- ========== RECORDS ========== -->
+  <section class="tab-panel" id="panel-records">
+    <div class="panel-header">
+      <h2>Firing Records</h2>
+      <span class="records-count" id="records-count">0 firings</span>
+    </div>
+    <div class="records-table-wrap">
+      <table class="records-table" id="records-table">
+        <thead>
+          <tr>
+            <th class="sortable" data-col="startTime">Date <span class="sort-icon">↕</span></th>
+            <th>Schedule</th>
+            <th class="sortable" data-col="peakTempF">Peak °F <span class="sort-icon">↕</span></th>
+            <th class="sortable" data-col="duration">Duration <span class="sort-icon">↕</span></th>
+            <th class="sortable" data-col="totalKWh">kWh <span class="sort-icon">↕</span></th>
+            <th class="sortable" data-col="totalCost">Cost <span class="sort-icon">↕</span></th>
+            <th>Humidity</th>
+            <th>Outdoor °F</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="records-tbody">
+          <tr><td colspan="9" class="empty-state">No firing records yet. Complete a firing to see records here.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ========== SETTINGS ========== -->
+  <section class="tab-panel" id="panel-settings">
+    <div class="panel-header">
+      <h2>Settings</h2>
+    </div>
+
+    <div class="settings-grid">
+
+      <div class="settings-card">
+        <h3 class="settings-card-title">📍 Location (for weather)</h3>
+        <p class="settings-desc">Enter your city, state, or zip code to fetch outdoor temperature and humidity via Open-Meteo.</p>
+        <div class="form-row">
+          <label class="form-label">City, State or Zip</label>
+          <input class="form-input" id="set-location-query" type="text" placeholder="e.g. Nashville, TN or 10001" />
+        </div>
+        <div class="sensor-info-row" style="margin-top:0.5rem; justify-content:flex-start; gap:0.5rem;">
+          <span class="info-label">Matched Location:</span>
+          <span class="info-value" id="info-location-name">—</span>
+        </div>
+        <button class="btn btn-primary" id="btn-save-location">Save Location</button>
+      </div>
+
+      <div class="settings-card">
+        <h3 class="settings-card-title">⚡ Electricity & Power</h3>
+        <p class="settings-desc">Used to calculate firing cost. Power draw is pulled live from Emporia Vue when configured.</p>
+        <div class="form-row">
+          <label class="form-label">Electricity Rate ($/kWh)</label>
+          <input class="form-input" id="set-rate" type="number" step="0.001" placeholder="0.12" />
+        </div>
+        <div class="form-row">
+          <label class="form-label">Default Kiln Wattage (W)</label>
+          <input class="form-input" id="set-watts" type="number" step="100" placeholder="2400" />
+          <span class="form-hint">Used as fallback when Emporia is not configured</span>
+        </div>
+        <button class="btn btn-primary" id="btn-save-power">Save Power Settings</button>
+      </div>
+
+      <div class="settings-card emporia-card">
+        <h3 class="settings-card-title">🔌 Emporia Vue (Optional)</h3>
+        <p class="settings-desc">Connect your Emporia Vue account for real-time energy monitoring. Credentials are stored locally on the server only — never transmitted to any third party except Emporia's own servers.</p>
+        <div class="form-row">
+          <label class="form-label">Emporia Account Email</label>
+          <input class="form-input" id="set-emporia-email" type="email" placeholder="you@example.com" autocomplete="off" />
+        </div>
+        <div class="form-row">
+          <label class="form-label">Emporia Account Password</label>
+          <input class="form-input" id="set-emporia-password" type="password" placeholder="••••••••" autocomplete="off" />
+        </div>
+        <div class="form-row">
+          <label class="form-label">Device GID (optional)</label>
+          <input class="form-input" id="set-emporia-gid" type="text" placeholder="Leave blank to auto-detect first device" />
+        </div>
+        <div class="form-row">
+          <label class="form-label">Channel Number</label>
+          <input class="form-input" id="set-emporia-channel" type="number" placeholder="1" min="1" />
+          <span class="form-hint">1 = whole-home main feed; individual circuits use higher numbers</span>
+        </div>
+        <div class="emporia-status-row">
+          <div class="emporia-status" id="emporia-status">
+            <span class="emporia-dot"></span>
+            <span id="emporia-status-label">Not configured</span>
+          </div>
+          <div style="display:flex; flex-wrap:wrap; gap:0.5rem;">
+            <button class="btn btn-outline" id="btn-test-emporia">Test Connection</button>
+            <button class="btn btn-primary" id="btn-save-emporia">Save Emporia Settings</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-card" style="border-color: rgba(186, 104, 200, 0.3);">
+        <h3 class="settings-card-title">🤖 AI Assistant Settings</h3>
+        <p class="settings-desc">Enable advanced computer vision features to analyze witness cones and auto-tune firing schedules based on defects. <br/><a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--ember); text-decoration:none;">Get a Free Google Gemini API Key here</a></p>
+        <div class="form-row">
+          <label class="form-label">Google Gemini API Key</label>
+          <input class="form-input" id="set-ai-api-key" type="password" placeholder="AIzaSy..." />
+        </div>
+        <button class="btn btn-primary" id="btn-save-ai">Save AI Config</button>
+      </div>
+
+      <div class="settings-card" style="border-color: rgba(255, 180, 50, 0.3);">
+        <h3 class="settings-card-title">🧠 Adaptive Learning</h3>
+        <p class="settings-desc">When enabled, KilnForge automatically learns your kiln's exact coasting behavior after each ramp step and builds a predictive braking model. Once your system is dialed in, lock it to prevent further updates.</p>
+        <div style="display:flex; align-items:center; gap:1rem; margin-top:0.5rem;">
+          <label style="display:flex; align-items:center; gap:0.6rem; cursor:pointer; font-size:0.9rem; color:var(--text-primary);">
+            <input type="checkbox" id="set-adaptive-learning" style="width:18px; height:18px; cursor:pointer; accent-color:var(--ember);" />
+            <span>Enable Adaptive Learning</span>
+          </label>
+        </div>
+        <div id="adaptive-learning-status" style="font-size:0.8rem; color:var(--text-muted); margin-top:0.5rem;">—</div>
+        <button class="btn btn-primary" id="btn-save-adaptive" style="margin-top:0.75rem;">Save Learning State</button>
+      </div>
+      <div class="settings-card">
+        <h3 class="settings-card-title">🌡️ Sensor Info</h3>
+        <p class="settings-desc">MAX31855 thermocouple via SPI on Raspberry Pi. Python Adafruit library required on Pi.</p>
+        <div class="sensor-info-grid">
+          <div class="sensor-info-row">
+            <span class="info-label">Sensor Mode</span>
+            <span class="info-value" id="info-sensor-mode">—</span>
+          </div>
+          <div class="sensor-info-row">
+            <span class="info-label">Emporia Connected</span>
+            <span class="info-value" id="info-emporia-connected">—</span>
+          </div>
+        </div>
+        <div class="pi-wiring">
+          <h4>MAX31855 Wiring (Pi SPI)</h4>
+          <pre class="wiring-table">VCC  → Pin 1  (3.3V)
+GND  → Pin 6  (GND)
+SCK  → Pin 23 (BCM11 SCLK)
+CS   → Pin 29 (BCM5  GPIO5)
+MISO → Pin 21 (BCM9  MISO)</pre>
+          <span class="wiring-hint">Enable SPI: sudo raspi-config → Interface Options → SPI</span>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+</main>
+
+<!-- ===== SCHEDULE EDITOR MODAL ===== -->
+<div class="modal-overlay hidden" id="schedule-modal">
+  <div class="modal-container" style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; position: relative;">
+    <div class="modal" role="dialog" aria-labelledby="modal-title" style="flex: 1; max-width: 600px; width: 100%; z-index: 5;">
+      <div class="modal-header">
+        <h2 class="modal-title" id="modal-title">New Schedule</h2>
+        <button class="modal-close" id="modal-close" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body" style="display:flex; flex-direction:column; gap: 1.5rem; align-items: stretch;">
+        <div class="modal-form-column" style="display:flex; flex-direction:column; gap:1rem;">
+        <div class="form-row">
+          <label class="form-label">Schedule Name</label>
+          <input class="form-input" id="sched-name" type="text" placeholder="e.g. Cone 6 Bisque" />
+        </div>
+        <div class="form-row">
+          <label class="form-label">Description</label>
+          <input class="form-input" id="sched-desc" type="text" placeholder="Short description (optional)" />
+        </div>
+        <div class="form-row">
+          <label class="form-label">Kiln Wattage (W)</label>
+          <input class="form-input" id="sched-watts" type="number" step="100" placeholder="2400" />
+        </div>
+
+        <div class="steps-editor">
+          <div class="steps-header">
+            <span class="steps-title">Firing Steps</span>
+            <div class="steps-add-btns">
+              <button class="btn btn-sm btn-outline" id="btn-add-ramp">+ Ramp</button>
+              <button class="btn btn-sm btn-outline" id="btn-add-hold">+ Hold</button>
+            </div>
+          </div>
+          <div class="steps-list" id="steps-list"></div>
+        </div>
+      </div>
+      </div> <!-- /modal-body -->
+      <div class="modal-footer" style="display: flex; gap: 0.5rem; justify-content: flex-end; width: 100%;">
+        <button class="btn btn-ghost" id="modal-cancel" style="margin-right: auto;">Cancel</button>
+        <button class="btn btn-outline" id="modal-save-copy" style="display: none;">Save as Copy</button>
+        <button class="btn btn-primary" id="modal-save">Save Schedule</button>
+      </div>
+    </div>
+    <div class="cone-reference floating-side-window" style="background:var(--bg-surface); border:1px solid var(--border-accent); border-radius:var(--radius-xl); padding:1.5rem; width:280px; box-shadow:0 10px 40px rgba(0,0,0,0.5); position: absolute; right: 2rem; top: 2rem; z-index: 10;">
+      <h4 style="font-size:0.8rem; font-weight:700; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:0.75rem;">Orton Cone Target °F</h4>
+      <div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:0.5rem; line-height:1.4;">Based on final 108°F/hr climb:</div>
+      <table style="width:100%; font-size:0.75rem; border-collapse:collapse;">
+        <tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:0.3rem 0; color:var(--text-secondary);">Cone 022</td><td style="padding:0.3rem 0; text-align:right; font-family:var(--font-mono); color:var(--amber);">1087°F</td></tr>
+        <tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:0.3rem 0; color:var(--text-secondary);">Cone 018</td><td style="padding:0.3rem 0; text-align:right; font-family:var(--font-mono); color:var(--amber);">1323°F</td></tr>
+        <tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:0.3rem 0; color:var(--text-secondary);">Cone 012</td><td style="padding:0.3rem 0; text-align:right; font-family:var(--font-mono); color:var(--amber);">1582°F</td></tr>
+        <tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:0.3rem 0; color:var(--text-secondary);">Cone 06</td><td style="padding:0.3rem 0; text-align:right; font-family:var(--font-mono); color:var(--ember);">1828°F</td></tr>
+        <tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:0.3rem 0; color:var(--text-secondary);">Cone 04</td><td style="padding:0.3rem 0; text-align:right; font-family:var(--font-mono); color:var(--ember);">1945°F</td></tr>
+        <tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:0.3rem 0; color:var(--text-secondary);">Cone 01</td><td style="padding:0.3rem 0; text-align:right; font-family:var(--font-mono); color:var(--ember);">2046°F</td></tr>
+        <tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:0.3rem 0; color:var(--text-secondary);">Cone 5</td><td style="padding:0.3rem 0; text-align:right; font-family:var(--font-mono); color:var(--molten);">2167°F</td></tr>
+        <tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:0.3rem 0; color:var(--text-secondary);">Cone 6</td><td style="padding:0.3rem 0; text-align:right; font-family:var(--font-mono); color:var(--molten);">2232°F</td></tr>
+        <tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:0.3rem 0; color:var(--text-secondary);">Cone 9</td><td style="padding:0.3rem 0; text-align:right; font-family:var(--font-mono); color:var(--molten);">2300°F</td></tr>
+        <tr><td style="padding:0.3rem 0; color:var(--text-secondary);">Cone 10</td><td style="padding:0.3rem 0; text-align:right; font-family:var(--font-mono); color:var(--molten);">2345°F</td></tr>
+      </table>
+      <div style="font-size:0.65rem; color:var(--text-muted); margin-top:0.5rem; font-style:italic;">Note: Slower climb rates lower the target cone temp.</div>
+      
+      <h4 style="font-size:0.8rem; font-weight:700; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.05em; margin-top:1.25rem; margin-bottom:0.5rem;">Key Milestones</h4>
+      <table style="width:100%; font-size:0.75rem; border-collapse:collapse;">
+        <tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:0.3rem 0; color:var(--text-secondary);">Candling / Water Smoking</td><td style="padding:0.3rem 0; text-align:right; font-family:var(--font-mono); color:var(--amber);">180 - 212°F</td></tr>
+        <tr><td style="padding:0.3rem 0; color:var(--text-secondary);">Quartz Inversion</td><td style="padding:0.3rem 0; text-align:right; font-family:var(--font-mono); color:var(--molten);">1063°F</td></tr>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ===== POST-FIRING TUNING MODAL ===== -->
+<div class="modal-overlay hidden" id="tuning-modal">
+  <div class="modal" role="dialog" aria-labelledby="tuning-title">
+    <div class="modal-header">
+      <h2 class="modal-title" id="tuning-title">Post-Firing Analysis</h2>
+      <button class="modal-close" id="tuning-close" aria-label="Close">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="font-size:0.8rem; color:var(--text-muted); margin-bottom:1.5rem;">Schedule: <strong id="tuning-sched-name" style="color:var(--text-primary);"></strong></div>
+      
+      <h3 style="font-size:0.9rem; margin-bottom:0.5rem; color:var(--text-primary);">1. AI Witness Cone Vision</h3>
+      <p style="font-size:0.8rem; color:var(--text-muted); margin-bottom:1rem;">Upload a photo of your witness cone to have Gemini AI estimate the bend and peak heat-work.</p>
+      
+      <div style="background:var(--bg-elevated); padding:1rem; border-radius:var(--radius-sm); border:1px solid var(--border); margin-bottom:1.5rem;">
+        <div style="display:flex; gap:1rem; align-items:center; margin-bottom:1rem;">
+          <input type="file" id="cone-file-input" accept="image/*" style="font-size:0.8rem; color:var(--text-secondary); width: 100%;" />
+          <input type="text" id="cone-target-num" class="form-input" placeholder="Target Cone (e.g. 6 or 04)" style="width:160px; font-size:0.8rem;" />
+        </div>
+        <button class="btn btn-primary btn-sm" id="btn-analyze-cone">Analyze Image</button>
+        
+        <div id="ai-loading" class="hidden" style="margin-top:1rem; text-align:center;">
+          <div class="ai-loader" style="padding:0.5rem 0;">
+            <div class="ai-loader-dot"></div>
+            <div class="ai-loader-dot"></div>
+            <div class="ai-loader-dot"></div>
+          </div>
+          <div style="font-size:0.8rem; color:var(--text-muted);">Analyzing heat-work & generating tuned profile...</div>
+        </div>
+
+        <div id="vision-results" style="margin-top:1rem; font-size:0.85rem; color:var(--text-secondary); display:none; flex-direction:column; gap:0.5rem; border-top:1px solid rgba(255,255,255,0.05); padding-top:1rem;">
+          <div><strong>Estimated Bend:</strong> <span id="res-bend" style="color:var(--text-primary);"></span></div>
+          <div><strong>Maturity:</strong> <span id="res-maturity" style="color:var(--ember); font-weight:bold;"></span></div>
+          <div style="font-style:italic; margin-bottom:1rem;" id="res-analysis"></div>
+          
+          <div id="auto-tune-prompt-box" style="background: rgba(0,0,0,0.2); padding: 1rem; border-radius: 6px; border: 1px solid var(--ember); display:none;">
+            <div style="color:var(--text-primary); font-weight:600; margin-bottom:0.5rem;">Do you want to update the firing schedule with this new tuned version?</div>
+            <div style="font-size:0.8rem; color:var(--text-muted); margin-bottom:1rem;">A temporary smart-adjusted schedule (<span id="tuned-preview-name" style="color:var(--ember);"></span>) has been generated based on this analysis.</div>
+            <div style="display:flex; gap:0.5rem;">
+              <button class="btn btn-sm btn-outline" id="btn-tuning-deny">Deny</button>
+              <button class="btn btn-sm btn-primary" id="btn-tuning-confirm">Confirm Update</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer" style="display:none;">
+      <button class="btn btn-ghost" id="btn-cancel-tuning">Cancel</button>
+      <button class="btn btn-primary" id="btn-apply-tuning">Generate Tuned Profile</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== FIRING REPLAY MODAL ===== -->
+<div class="modal-overlay" id="replay-modal" style="display:none;" onclick="if(event.target===this)closeReplayModal()">
+  <div class="modal" role="dialog" style="max-width:800px; width:100%;">
+    <div class="modal-header">
+      <h2 class="modal-title" id="replay-title">📈 Firing Replay</h2>
+      <button class="modal-close" onclick="closeReplayModal()" aria-label="Close">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="replay-status" style="font-size:0.8rem; color:var(--text-muted); margin-bottom:1rem;"></div>
+      <div style="height:320px; position:relative;">
+        <canvas id="replay-chart" style="display:none;"></canvas>
+      </div>
+      <div id="replay-ramp-table" style="margin-top:1.25rem;"></div>
+
+      <!-- ADAPTIVE TUNING BOX -->
+      <div id="replay-adaptive-tuning" class="card" style="margin-top: 1.5rem; display: none; border: 1px solid var(--accent); position: relative; overflow: hidden; padding: 1.25rem;">
+        <div style="position: absolute; top:0; left:0; right:0; height:4px; background: var(--accent);"></div>
+        <h3 style="margin-top: 0.5rem; color: var(--accent);">🤖 Physical Cone Tune-Up</h3>
+        <p class="text-sm text-dim">To make the Virtual Cone math smarter, tell the AI exactly how your physical test cone bent on the kiln shelf.</p>
+        <div style="display: flex; gap: 1rem; margin-top: 1rem; align-items: center; flex-wrap: wrap;">
+          <input type="hidden" id="tuning-record-id">
+          <select id="tuning-physical-result" style="padding: 0.5rem; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 4px; flex-grow: 1;">
+            <option value="">Select physical cone result...</option>
+            <option value="Underfired">🥶 Underfired (Too cold)</option>
+            <option value="Slightly Underfired">❄️ Slightly underfired (Tip didn't touch)</option>
+            <option value="Perfect">✔️ Perfect (Tip touching shelf)</option>
+            <option value="Slightly Overfired">🔥 Slightly overfired (Puddled slightly)</option>
+            <option value="Overfired">🌋 Overfired (Completely melted flat)</option>
+          </select>
+          <button id="btn-submit-tuning" class="btn btn-outline" style="border-color: var(--accent); color: var(--accent);" onclick="submitConeTuning()">Calculate & Clone Schedule</button>
+        </div>
+        <div id="tuning-result-msg" style="margin-top: 1rem; color: var(--success); font-weight: bold; display: none;"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeReplayModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== STOP FIRING CONFIRM MODAL ===== -->
+<div class="modal-overlay" id="stop-confirm-modal" style="display:none; z-index:9999;">
+  <div class="modal" role="alertdialog" aria-labelledby="stop-confirm-title" style="max-width:420px; width:100%; border:1px solid rgba(255,80,60,0.35); box-shadow: 0 0 40px rgba(255,60,40,0.2);">
+    <div class="modal-header" style="border-bottom:1px solid rgba(255,80,60,0.2);">
+      <h2 class="modal-title" id="stop-confirm-title" style="color:#ff6b35;">⚠️ Stop Firing?</h2>
+    </div>
+    <div class="modal-body" style="padding:1.5rem;">
+      <p style="color:var(--text-primary); font-size:1rem; margin:0 0 0.5rem;">Are you sure you want to <strong>immediately stop</strong> the active firing?</p>
+      <p style="color:var(--text-muted); font-size:0.85rem; margin:0;">The relay will be cut and the kiln will begin cooling. This cannot be undone.</p>
+    </div>
+    <div class="modal-footer" style="gap:0.75rem; border-top:1px solid rgba(255,80,60,0.15);">
+      <button class="btn btn-ghost" id="stop-confirm-cancel" style="flex:1;">Cancel — Keep Firing</button>
+      <button class="btn" id="stop-confirm-ok" style="flex:1; background:linear-gradient(135deg,#c0392b,#e74c3c); color:#fff; font-weight:700; letter-spacing:0.04em;">🛑 Yes, Stop Now</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== TOAST ===== -->
+<div class="toast-container" id="toast-container"></div>
+
+<script src="app.js?v=2"></script>
+</body>
+</html>
