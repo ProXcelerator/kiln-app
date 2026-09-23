@@ -309,8 +309,19 @@ class Kiln extends EventEmitter {
       }
 
     } else if (step.type === 'hold') {
-      const elapsed = (Date.now() - this.stepStartTime) / 1000 / 60;
-      if (elapsed >= step.durationMinutes) this._nextStep(kilnTempF);
+      const LAG_TOLERANCE_F = 5;
+      if ((kilnTempF - step.tempF) > LAG_TOLERANCE_F) {
+        // Waiting to cool down. Pause timer.
+        this.stepStartTime += tickDeltaMs;
+        this._isWaitingForCoolDown = true;
+      } else {
+        this._isWaitingForCoolDown = false;
+      }
+
+      const elapsedMs = Date.now() - this.stepStartTime;
+      this._trueHoldTimeMs = elapsedMs;
+      const elapsedMin = elapsedMs / 1000 / 60;
+      if (elapsedMin >= step.durationMinutes) this._nextStep(kilnTempF);
     }
   }
 
@@ -333,6 +344,8 @@ class Kiln extends EventEmitter {
       relayOn: this.relayOn,
       dutyCycle: this.dutyCycle || 0,
       idealSetpoint: this.currentSetpoint != null ? Math.round(this.currentSetpoint * 10) / 10 : null,
+      isWaitingForCoolDown: this._isWaitingForCoolDown || false,
+      trueHoldTimeMs: this._trueHoldTimeMs || 0,
       virtualCone: virtualCone.getLivePayload(),
       projectedEndTime: this._projectEndTime()
     };
@@ -367,6 +380,8 @@ class Kiln extends EventEmitter {
     this.stepStartTime = Date.now();
     this.stepStartTemp = null; // Forces the next tick() to precisely capture the kiln's current temp
     this.state = step.type === 'hold' ? 'HOLD' : 'FIRING';
+    this._isWaitingForCoolDown = false;
+    this._trueHoldTimeMs = 0;
     
     // Notice: We DO NOT blindly set the relay to TRUE here anymore!
     // We let the thermostatic tick() control loop naturally turn it on 
@@ -469,13 +484,10 @@ class Kiln extends EventEmitter {
     this.relayOn = on;
     // === GPIO HOOK (Raspberry Pi only) ===
     try {
-      const { Gpio } = require('onoff');
-      if (!this._relay) {
-        this._relay = new Gpio(17, 'out');
-      }
-      this._relay.writeSync(on ? 1 : 0);
+      const { execSync } = require('child_process');
+      execSync(`pinctrl set 17 op ${on ? 'dh' : 'dl'}`);
     } catch (err) {
-      console.warn('[Relay Warning] Could not trigger hardware GPIO. Is onoff installed?', err.message);
+      console.warn('[Relay Warning] Could not trigger hardware GPIO via pinctrl:', err.message);
     }
     console.log(`[Relay] ${on ? 'ON' : 'OFF'}`);
   }
@@ -491,17 +503,29 @@ class Kiln extends EventEmitter {
     for (let i = this.stepIndex; i < steps.length; i++) {
       const step = steps[i];
       if (step.type === 'ramp') {
-        const currentStepTemp = i === this.stepIndex ? null : steps[i - 1]?.targetTempF || steps[i - 1]?.tempF || 72;
+        const currentStepTemp = i === this.stepIndex ? (this.kilnTempReadings[this.kilnTempReadings.length - 1] || 72) : (steps[i - 1]?.targetTempF || steps[i - 1]?.tempF || 72);
         // Estimate from start-of-step temp
         const fromTemp = currentStepTemp || 72;
         const toTemp = step.targetTempF;
         const deltaTemp = Math.abs(toTemp - fromTemp);
-        const hours = deltaTemp / (step.ratePerHour || 100);
+        let rate = step.ratePerHour || 100;
+        // If cooling, cap the prediction rate to a realistic 300F/hr
+        if (fromTemp > toTemp) {
+          rate = Math.min(rate, 300);
+        }
+        const hours = deltaTemp / rate;
         remainingMinutes += hours * 60;
       } else if (step.type === 'hold') {
         if (i === this.stepIndex && this.stepStartTime) {
           const elapsedHoldMin = (Date.now() - this.stepStartTime) / 1000 / 60;
           remainingMinutes += Math.max(0, step.durationMinutes - elapsedHoldMin);
+          // Add estimated cooldown time if we are waiting for the hold temp
+          if (this._isWaitingForCoolDown) {
+             const currentTemp = this.kilnTempReadings[this.kilnTempReadings.length - 1] || 72;
+             if (currentTemp > step.tempF) {
+               remainingMinutes += ((currentTemp - step.tempF) / 300) * 60;
+             }
+          }
         } else {
           remainingMinutes += step.durationMinutes;
         }

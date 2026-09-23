@@ -230,7 +230,24 @@ function deleteSchedule(id) {
   }
 }
 
+// Prune readings older than X days to keep database size in check
+function pruneOldReadings(daysToKeep = 30) {
+  const database = getDb();
+  if (!database) return;
+  try {
+    const cutoff = Date.now() - (daysToKeep * 24 * 60 * 60 * 1000);
+    const stmt = database.prepare('DELETE FROM readings WHERE timestamp < ?');
+    const info = stmt.run(cutoff);
+    if (info.changes > 0) {
+      console.log(`[DB] Auto-pruned ${info.changes} raw readings older than ${daysToKeep} days.`);
+    }
+  } catch (err) {
+    console.warn('[DB] pruneOldReadings error:', err.message);
+  }
+}
+
 module.exports = { 
   insertReading, insertFiring, getReadings, getAllFirings, deleteFiring,
-  insertSchedule, getAllSchedules, deleteSchedule, autoRecoverFirings
+  insertSchedule, getAllSchedules, deleteSchedule, autoRecoverFirings, pruneOldReadings
 };
+

@@ -20,6 +20,10 @@ const db = require('./db');
 // Auto-recover any firings that were abruptly interrupted (e.g., power loss)
 db.autoRecoverFirings();
 
+// Prune raw readings older than 30 days to protect disk space
+db.pruneOldReadings(30);
+
+
 // ID of the currently active firing — set when start is pressed, cleared on complete
 let currentFiringId = null;
 let currentFiringWeather = { maxTempF: null, minTempF: null };
@@ -59,6 +63,14 @@ const SETTINGS_FILE = path.join(__dirname, 'data', 'settings.json');
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
+
+safety.on('trip', ({ reason }) => {
+  console.error('[Server] Safety trip event received:', reason);
+  try { kiln.stop(); } catch (e) {}
+  safety.disarm();
+  const tripMsg = JSON.stringify({ type: 'safetyTrip', reason });
+  wss.clients.forEach(c => { if (c.readyState === WebSocket.OPEN) c.send(tripMsg); });
+});
 
 app.use(express.json({ limit: '20mb' }));
 app.use(express.static(path.join(__dirname, '..', 'public')));
@@ -124,6 +136,7 @@ async function telemetryLoop() {
     if (!safetyResult.safe) {
       console.error('[Server] Safety trip — stopping kiln:', safetyResult.reason);
       kiln.stop();
+      safety.disarm();
       const tripMsg = JSON.stringify({ type: 'safetyTrip', reason: safetyResult.reason });
       wss.clients.forEach(c => { if (c.readyState === WebSocket.OPEN) c.send(tripMsg); });
     }
@@ -202,8 +215,12 @@ async function telemetryLoop() {
   } catch (err) {
     console.error('[Loop Error]', err);
   } finally {
-    // 7. Recursive setTimeout (more stable than setInterval for async tasks)
-    setTimeout(telemetryLoop, 2000);
+    // Poll fast (2s) when actively firing or holding, slow down (15s) when IDLE/COMPLETE
+    // to dramatically reduce CPU overhead, SPI read contention, and log file sizes.
+    const interval = liveSnapshot.kilnStatus && (liveSnapshot.kilnStatus.state === 'FIRING' || liveSnapshot.kilnStatus.state === 'HOLD')
+      ? 2000
+      : 15000;
+    setTimeout(telemetryLoop, interval);
   }
 }
 
@@ -211,10 +228,33 @@ async function telemetryLoop() {
 telemetryLoop();
 
 // ============================================================
+// WebSocket Heartbeat (Ping/Pong) to prevent memory leak from stale mobile clients
+// ============================================================
+const heartbeatInterval = setInterval(() => {
+  wss.clients.forEach((ws) => {
+    if (ws.isAlive === false) {
+      console.log('[WS] Stale client detected — terminating connection');
+      return ws.terminate();
+    }
+    ws.isAlive = false;
+    ws.ping();
+  });
+}, 30000);
+
+wss.on('close', () => {
+  clearInterval(heartbeatInterval);
+});
+
+// ============================================================
 // WebSocket
 // ============================================================
 wss.on('connection', (ws) => {
   console.log('[WS] Client connected');
+  ws.isAlive = true;
+
+  ws.on('pong', () => {
+    ws.isAlive = true;
+  });
 
   // Send the current live snapshot immediately
   ws.send(JSON.stringify({ type: 'telemetry', data: liveSnapshot }));
@@ -233,6 +273,7 @@ wss.on('connection', (ws) => {
 // ============================================================
 kiln.on('complete', async (record) => {
   console.log('[Kiln] Firing complete, saving record');
+  safety.disarm();
 
   // Clear the history buffer — the firing is done
   firingHistory = [];
@@ -241,13 +282,14 @@ kiln.on('complete', async (record) => {
   // an emergency shutdown, causing the process to die before the record is saved.
   // We already fetched daily weather at the start of the firing.
 
+  const currentSettings = loadSettings();
   const fullRecord = {
     ...record,
     id: currentFiringId,
     ambientTempF: currentFiringWeather.maxTempF,
     humidity: currentFiringWeather.minTempF, // Reusing humidity field for minTempF
-    totalCost: Math.round(record.totalKWh * (settings.electricityRate || 0.12) * 100) / 100,
-    electricityRate: settings.electricityRate || 0.12
+    totalCost: Math.round(record.totalKWh * (currentSettings.electricityRate || 0.12) * 100) / 100,
+    electricityRate: currentSettings.electricityRate || 0.12
   };
   const saved = records.append(fullRecord);
 
@@ -409,6 +451,47 @@ app.post('/api/kiln/start', (req, res) => {
   }
 });
 
+app.post('/api/kiln/warmup', (req, res) => {
+  const currentStatus = kiln.getStatus();
+  if (currentStatus.state === 'FIRING' || currentStatus.state === 'HOLD') {
+    return res.status(400).json({ error: 'Kiln is already active' });
+  }
+
+  const s = loadSettings();
+  const warmupSchedule = {
+    id: 'schedule-warmup-250',
+    name: 'Warm Up (250°F)',
+    description: 'Safe preheat ramp to 250°F, holds at 250°F until stopped.',
+    kilnWatts: s.defaultKilnWatts || 2400,
+    steps: [
+      { id: 'w-ramp', type: 'ramp', label: 'Warm Up → 250°F', targetTempF: 250, ratePerHour: 180 },
+      { id: 'w-hold', type: 'hold', label: 'Hold @ 250°F', tempF: 250, durationMinutes: 1440 }
+    ]
+  };
+
+  try {
+    safety.reloadConfig();
+    safety.arm();
+    const status = kiln.start(warmupSchedule, 0);
+
+    const { v4: uuidv4 } = require('uuid');
+    currentFiringId = uuidv4();
+    console.log('[DB] Warm Up started, ID:', currentFiringId);
+
+    weather.getDailyForecast().then(forecast => {
+      currentFiringWeather = forecast;
+    }).catch(err => {
+      console.warn('[Weather] Failed to get start-of-firing weather:', err.message);
+      currentFiringWeather = { maxTempF: null, minTempF: null };
+    });
+
+    res.json({ ...status, safetyStatus: safety.getStatus() });
+  } catch (err) {
+    safety.disarm();
+    res.status(400).json({ error: err.message });
+  }
+});
+
 app.post('/api/kiln/stop', (req, res) => {
   const status = kiln.stop();
   safety.disarm();
@@ -542,6 +625,7 @@ app.post('/api/auto-tune-schedule', (req, res) => {
 safety.on('trip', ({ reason }) => {
   console.error('[Safety Event] Trip received:', reason);
   try { kiln.stop(); } catch (e) {}
+  safety.disarm();
   const msg = JSON.stringify({ type: 'safetyTrip', reason });
   wss.clients.forEach(c => { if (c.readyState === WebSocket.OPEN) c.send(msg); });
 });

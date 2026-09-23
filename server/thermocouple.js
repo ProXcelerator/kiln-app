@@ -76,7 +76,9 @@ async function readTempF(kilnState, schedule, stepIndex) {
         if (resolved) return;
         resolved = true;
         try { process.kill(-child.pid, 'SIGKILL'); } catch(e) {}
-        console.warn('[Thermocouple] Python read timed out — killed process group, using last reading.');
+        if (kilnState === 'FIRING' || kilnState === 'HOLD') {
+          console.warn('[Thermocouple] Python read timed out — killed process group, using last reading.');
+        }
         resolve(lastReading);
       }, 4000);
     });

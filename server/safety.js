@@ -16,6 +16,7 @@
 const fs = require('fs');
 const path = require('path');
 const EventEmitter = require('events');
+const { performance } = require('perf_hooks');
 
 const SETTINGS_FILE = path.join(__dirname, 'data', 'settings.json');
 
@@ -151,16 +152,17 @@ class SafetySystem extends EventEmitter {
   // ---- Software Watchdog ----
 
   _startWatchdog() {
-    this._lastFedAt = Date.now();
+    this._lastFedAt = performance.now();
     if (this._watchdogTimer) clearInterval(this._watchdogTimer);
 
     // Check every second if watchdog has been fed
     this._watchdogTimer = setInterval(() => {
       if (!this.armed) return;
-      const elapsed = (Date.now() - this._lastFedAt) / 1000;
+      const elapsed = (performance.now() - this._lastFedAt) / 1000;
       if (elapsed > this.config.watchdogTimeoutSec) {
         console.error(`[Safety] ⛔ SOFTWARE WATCHDOG: Loop has not fed watchdog for ${elapsed.toFixed(1)}s — tripping`);
         this.emit('trip', { reason: `WATCHDOG_TIMEOUT: Main loop stalled for ${elapsed.toFixed(1)}s` });
+        this.disarm();
       }
     }, 1000);
 
@@ -176,7 +178,7 @@ class SafetySystem extends EventEmitter {
   }
 
   _feedWatchdog() {
-    this._lastFedAt = Date.now();
+    this._lastFedAt = performance.now();
     this._petHardwareWatchdog();
   }
 
@@ -232,7 +234,7 @@ class SafetySystem extends EventEmitter {
 
   _trackTemp(tempF) {
     if (tempF == null || isNaN(tempF)) return;
-    const now = Date.now();
+    const now = performance.now();
     this._tempHistory.push({ time: now, tempF });
 
     // Prune history older than runawayWindowMin * 2
@@ -242,7 +244,7 @@ class SafetySystem extends EventEmitter {
 
   _checkRunaway() {
     const windowMs = this.config.runawayWindowMin * 60 * 1000;
-    const now = Date.now();
+    const now = performance.now();
     const windowStart = now - windowMs;
 
     const old = this._tempHistory.find(e => e.time >= windowStart);
