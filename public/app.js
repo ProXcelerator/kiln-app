@@ -342,12 +342,59 @@ function updateKilnStatus(status) {
     projEnd.textContent = '—';
   }
 
+  // Control Engine Mode Display
+  const currentEngineMode = status.controllerMode || state.live?.controllerMode || state.settings?.controllerMode || 'standard';
+  const modeBadge = document.getElementById('active-control-mode');
+  if (modeBadge) {
+    const isStd = currentEngineMode === 'standard';
+    modeBadge.textContent = isStd ? 'Classic' : 'Adaptive (ML)';
+    modeBadge.style.color = isStd ? 'var(--success, #4ade80)' : 'var(--ember, #ff6b35)';
+  }
+
   // Controls
   const isFiring = s === 'FIRING' || s === 'HOLD';
   btnStart.classList.toggle('hidden', isFiring);
   if (btnWarmup) btnWarmup.classList.toggle('hidden', isFiring);
   btnStop.classList.toggle('hidden', !isFiring);
   schedSel.disabled = isFiring;
+
+  // Studio Controls Sync
+  const btnStudioIgnite = document.getElementById('btn-studio-ignite');
+  const btnStudioStop = document.getElementById('btn-studio-stop');
+  if (btnStudioIgnite) btnStudioIgnite.classList.toggle('hidden', isFiring);
+  if (btnStudioStop) btnStudioStop.classList.toggle('hidden', !isFiring);
+
+  const cardGrid = document.getElementById('quick-cards-grid');
+  if (cardGrid) {
+    cardGrid.querySelectorAll('.quick-card').forEach(card => {
+      card.classList.toggle('disabled', isFiring);
+    });
+  }
+
+  const studioSel = document.getElementById('studio-dropdown-select');
+  const studioStepSel = document.getElementById('studio-step-select');
+  if (studioSel) studioSel.disabled = isFiring;
+  if (studioStepSel) studioStepSel.disabled = isFiring;
+
+  if (isFiring) {
+    const selName = document.getElementById('studio-sel-name');
+    const selDet = document.getElementById('studio-sel-details');
+    const subLabel = document.getElementById('quick-selected-label');
+    if (selName) selName.textContent = status.scheduleName || 'Active Firing';
+    if (selDet) {
+      if (status.currentStep) {
+        selDet.textContent = status.currentStep.label
+          ? `${status.currentStep.label} (${status.state})`
+          : `Step ${(status.stepIndex || 0) + 1} of ${status.totalSteps || 1} (${status.state})`;
+      } else {
+        selDet.textContent = `Firing state: ${status.state}`;
+      }
+    }
+    if (subLabel) subLabel.textContent = `Kiln is actively firing (${status.state})`;
+  } else {
+    const subLabel = document.getElementById('quick-selected-label');
+    if (subLabel) subLabel.textContent = 'Select a cycle below to prime';
+  }
 
   // Elapsed timer
   if (isFiring && status.startTime) {
@@ -845,18 +892,38 @@ function renderSchedules() {
 
 function populateScheduleSelect() {
   const sel = document.getElementById('start-schedule-select');
-  if (!sel) return;
-  const current = sel.value;
-  sel.innerHTML = '<option value="">Select a schedule…</option>';
-  state.schedules.forEach(s => {
-    const opt = document.createElement('option');
-    opt.value = s.id;
-    opt.textContent = s.name;
-    sel.appendChild(opt);
-  });
-  if (current) sel.value = current;
-  const startBtn = document.getElementById('btn-start-fire');
-  if (startBtn) startBtn.disabled = !sel.value;
+  const studioSel = document.getElementById('studio-dropdown-select');
+  const libCountEl = document.getElementById('qcard-library-count');
+
+  if (libCountEl) {
+    libCountEl.textContent = `${state.schedules.length} Programs`;
+  }
+
+  if (sel) {
+    const current = sel.value;
+    sel.innerHTML = '<option value="">Select a schedule…</option>';
+    state.schedules.forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s.id;
+      opt.textContent = s.name;
+      sel.appendChild(opt);
+    });
+    if (current) sel.value = current;
+    const startBtn = document.getElementById('btn-start-fire');
+    if (startBtn) startBtn.disabled = !sel.value;
+  }
+
+  if (studioSel) {
+    const current = studioSel.value;
+    studioSel.innerHTML = '<option value="">Choose saved schedule…</option>';
+    state.schedules.forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s.id;
+      opt.textContent = s.name;
+      studioSel.appendChild(opt);
+    });
+    if (current) studioSel.value = current;
+  }
 }
 
 function calcScheduleDuration(schedule) {
@@ -880,6 +947,8 @@ function calcScheduleDuration(schedule) {
 async function quickStartSchedule(id) {
   const sel = document.getElementById('start-schedule-select');
   if (sel) sel.value = id;
+  const studioSel = document.getElementById('studio-dropdown-select');
+  if (studioSel) studioSel.value = id;
   await startFiring(id);
   switchTab('dashboard');
 }
@@ -1108,9 +1177,11 @@ async function saveSchedule(asCopy = false) {
 // ============================================================
 // KILN CONTROLS
 // ============================================================
-async function startFiring(scheduleId) {
-  const id = scheduleId || document.getElementById('start-schedule-select').value;
-  const startStepIndex = document.getElementById('start-step-select')?.value || 0;
+async function startFiring(scheduleId, stepIndex) {
+  const id = scheduleId || document.getElementById('start-schedule-select')?.value;
+  const startStepIndex = (stepIndex !== undefined && stepIndex !== null)
+    ? stepIndex
+    : (document.getElementById('start-step-select')?.value || 0);
   if (!id) { toast('Select a schedule first', 'warning'); return; }
   try {
     const res = await fetch(API.kilnStart, {
@@ -1539,6 +1610,45 @@ function applySettingsToForm(s) {
     statEl.classList.remove('connected');
     statLabel.textContent = 'Not configured';
   }
+
+  // Controller engine mode
+  const mode = s.controllerMode || 'standard';
+  const rStd = document.getElementById('mode-standard');
+  const rPred = document.getElementById('mode-predictive');
+  if (rStd) rStd.checked = (mode === 'standard');
+  if (rPred) rPred.checked = (mode === 'predictive');
+
+  const rStdCalc = document.getElementById('mode-standard-calcifer');
+  const rPredCalc = document.getElementById('mode-predictive-calcifer');
+  if (rStdCalc) rStdCalc.checked = (mode === 'standard');
+  if (rPredCalc) rPredCalc.checked = (mode === 'predictive');
+
+  updateControllerModeDisplay(mode);
+}
+
+function updateControllerModeDisplay(mode) {
+  const isStd = mode === 'standard';
+  const statusEl = document.getElementById('controller-mode-status');
+  if (statusEl) {
+    if (isStd) {
+      statusEl.textContent = '🟢 Standard Active: Pure deterministic schedule pacing. No machine learning.';
+      statusEl.style.color = 'var(--success, #4ade80)';
+    } else {
+      statusEl.textContent = '🧠 Predictive Active: Thermal profile lookups & coasting predictions enabled.';
+      statusEl.style.color = 'var(--ember, #ff6b35)';
+    }
+  }
+
+  const calcStatusEl = document.getElementById('controller-mode-status-calcifer');
+  if (calcStatusEl) {
+    calcStatusEl.textContent = isStd ? '🟢 Standard Classic Active' : '🧠 Demon Predictive Magic Active';
+  }
+
+  const heroBadge = document.getElementById('active-control-mode');
+  if (heroBadge) {
+    heroBadge.textContent = isStd ? 'Classic' : 'Adaptive (ML)';
+    heroBadge.style.color = isStd ? 'var(--success, #4ade80)' : 'var(--ember, #ff6b35)';
+  }
 }
 
 function setVal(id, val) {
@@ -1572,11 +1682,302 @@ async function saveSettingsGroup(fields) {
 }
 
 // ============================================================
+// LAYOUT SWITCHER (FAIL-SAFE CLASSIC / STUDIO TOGGLE)
+// ============================================================
+function initLayoutSwitcher() {
+  const saved = localStorage.getItem('kilnforge_layout') || 'studio';
+  setLayoutMode(saved, false);
+
+  document.getElementById('btn-layout-studio')?.addEventListener('click', () => {
+    setLayoutMode('studio', true);
+  });
+
+  document.getElementById('btn-layout-classic')?.addEventListener('click', () => {
+    setLayoutMode('classic', true);
+  });
+}
+
+function setLayoutMode(mode, showToast = true) {
+  const isClassic = mode === 'classic';
+  document.body.classList.toggle('layout-classic', isClassic);
+
+  const btnStudio = document.getElementById('btn-layout-studio');
+  const btnClassic = document.getElementById('btn-layout-classic');
+
+  if (btnStudio) btnStudio.classList.toggle('active', !isClassic);
+  if (btnClassic) btnClassic.classList.toggle('active', isClassic);
+
+  localStorage.setItem('kilnforge_layout', mode);
+
+  if (showToast) {
+    toast(`Switched to ${isClassic ? 'Classic' : 'Studio'} View`, 'info');
+  }
+}
+
+// ============================================================
+// STUDIO QUICK ACTION CONTROLS
+// ============================================================
+let currentStudioSelection = null;
+
+function bindStudioControls() {
+  const cards = document.querySelectorAll('.quick-card');
+  const studioSel = document.getElementById('studio-dropdown-select');
+  const studioStepSel = document.getElementById('studio-step-select');
+  const btnIgnite = document.getElementById('btn-studio-ignite');
+  const btnStop = document.getElementById('btn-studio-stop');
+
+  // Handle Card Clicks
+  cards.forEach(card => {
+    card.addEventListener('click', () => {
+      // If firing is active, cards are disabled
+      if (state.live?.kilnStatus?.state === 'FIRING' || state.live?.kilnStatus?.state === 'HOLD') {
+        return;
+      }
+      selectStudioCard(card.id);
+    });
+
+    // Support keyboard selection (Enter / Space)
+    card.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        card.click();
+      }
+    });
+  });
+
+  // Handle studio dropdown change (Custom / Library card)
+  if (studioSel) {
+    studioSel.addEventListener('change', () => {
+      const schedId = studioSel.value;
+      if (!schedId) {
+        if (studioStepSel) {
+          studioStepSel.classList.add('hidden');
+          studioStepSel.innerHTML = '<option value="0">Start at Step 1</option>';
+        }
+        if (btnIgnite) btnIgnite.disabled = true;
+        updateStudioSelectionDisplay('Select Schedule', 'Choose a schedule from the dropdown to prime', 'Ignite Kiln', false);
+        currentStudioSelection = null;
+        return;
+      }
+
+      const sched = state.schedules.find(s => s.id === schedId);
+      if (sched) {
+        // Sync with classic select
+        const classicSel = document.getElementById('start-schedule-select');
+        if (classicSel) classicSel.value = schedId;
+
+        // Populate step selector if schedule has steps
+        if (studioStepSel) {
+          if (sched.steps && sched.steps.length > 0) {
+            studioStepSel.innerHTML = sched.steps.map((st, i) =>
+              `<option value="${i}">Start at Step ${i + 1}: ${st.type.toUpperCase()}</option>`
+            ).join('');
+            studioStepSel.classList.remove('hidden');
+          } else {
+            studioStepSel.classList.add('hidden');
+            studioStepSel.innerHTML = '<option value="0">Start at Step 1</option>';
+          }
+        }
+
+        const duration = calcScheduleDuration(sched);
+        currentStudioSelection = {
+          type: 'custom',
+          scheduleId: sched.id,
+          label: sched.name,
+          details: `${sched.name} • ${sched.steps.length} steps • ${duration}`
+        };
+
+        if (btnIgnite) btnIgnite.disabled = false;
+        updateStudioSelectionDisplay(
+          sched.name,
+          `${duration} • ${sched.steps.length} steps • Ready to fire`,
+          `Ignite: ${sched.name}`,
+          true
+        );
+      }
+    });
+  }
+
+  // Handle studio step select change
+  if (studioStepSel) {
+    studioStepSel.addEventListener('change', () => {
+      const stepIdx = parseInt(studioStepSel.value, 10) || 0;
+      // Also sync classic step select
+      const classicStepSel = document.getElementById('start-step-select');
+      if (classicStepSel) classicStepSel.value = stepIdx;
+
+      if (currentStudioSelection && currentStudioSelection.type === 'custom') {
+        const sched = state.schedules.find(s => s.id === currentStudioSelection.scheduleId);
+        if (sched) {
+          updateStudioSelectionDisplay(
+            sched.name,
+            `${calcScheduleDuration(sched)} • ${sched.steps.length} steps • Starting at Step ${stepIdx + 1}`,
+            `Ignite: ${sched.name}`,
+            true
+          );
+        }
+      }
+    });
+  }
+
+  // Ignite Button
+  if (btnIgnite) {
+    btnIgnite.addEventListener('click', async () => {
+      if (!currentStudioSelection) return;
+
+      if (currentStudioSelection.type === 'warmup') {
+        await startWarmup();
+      } else if (currentStudioSelection.type === 'preset' || currentStudioSelection.type === 'custom') {
+        let stepIdx = 0;
+        if (currentStudioSelection.type === 'custom' && studioStepSel && !studioStepSel.classList.contains('hidden')) {
+          stepIdx = parseInt(studioStepSel.value, 10) || 0;
+        }
+        await startFiring(currentStudioSelection.scheduleId, stepIdx);
+      }
+    });
+  }
+
+  // Studio Stop Button (same safe prompt)
+  if (btnStop) {
+    btnStop.addEventListener('click', stopFiring);
+  }
+}
+
+function selectStudioCard(cardId) {
+  const cards = document.querySelectorAll('.quick-card');
+  cards.forEach(c => c.classList.toggle('selected', c.id === cardId));
+
+  const studioSel = document.getElementById('studio-dropdown-select');
+  const studioStepSel = document.getElementById('studio-step-select');
+  const btnIgnite = document.getElementById('btn-studio-ignite');
+
+  if (cardId === 'qcard-warmup') {
+    if (studioSel) studioSel.classList.add('hidden');
+    if (studioStepSel) studioStepSel.classList.add('hidden');
+
+    currentStudioSelection = {
+      type: 'warmup',
+      label: 'Warm Up (250°F)',
+      details: 'Ramp at 180°F/hr to 250°F and hold indefinitely'
+    };
+
+    if (btnIgnite) btnIgnite.disabled = false;
+    updateStudioSelectionDisplay(
+      'Warm Up (250°F)',
+      'Candling hold for moisture removal • Heats to 250°F at 180°/hr and holds',
+      'Warm Up Kiln (250°F)',
+      true
+    );
+
+  } else if (cardId === 'qcard-bisque') {
+    if (studioSel) studioSel.classList.add('hidden');
+    if (studioStepSel) studioStepSel.classList.add('hidden');
+
+    const bisqueSched = state.schedules.find(s => s.id === 'schedule-med-bisque-06') ||
+                        state.schedules.find(s => s.name.toLowerCase().includes('bisque')) ||
+                        state.schedules[0];
+
+    if (bisqueSched) {
+      currentStudioSelection = {
+        type: 'preset',
+        scheduleId: bisqueSched.id,
+        label: bisqueSched.name,
+        details: `Cone 06 (~1828°F) • ${calcScheduleDuration(bisqueSched)} • ${bisqueSched.steps.length} steps`
+      };
+
+      if (btnIgnite) btnIgnite.disabled = false;
+      updateStudioSelectionDisplay(
+        bisqueSched.name,
+        `Cone 06 (~1828°F) • ${calcScheduleDuration(bisqueSched)} • ${bisqueSched.steps.length} steps`,
+        'Ignite: Bisque Firing',
+        true
+      );
+    } else {
+      updateStudioSelectionDisplay('Bisque Firing', 'No bisque schedule found in library', 'Ignite Kiln', false);
+      if (btnIgnite) btnIgnite.disabled = true;
+    }
+
+  } else if (cardId === 'qcard-glaze') {
+    if (studioSel) studioSel.classList.add('hidden');
+    if (studioStepSel) studioStepSel.classList.add('hidden');
+
+    const glazeSched = state.schedules.find(s => s.id === 'schedule-med-glaze-6') ||
+                       state.schedules.find(s => s.id === 'schedule-fast-glaze-6') ||
+                       state.schedules.find(s => s.name.toLowerCase().includes('glaze'));
+
+    if (glazeSched) {
+      currentStudioSelection = {
+        type: 'preset',
+        scheduleId: glazeSched.id,
+        label: glazeSched.name,
+        details: `Cone 6 (~2232°F) • ${calcScheduleDuration(glazeSched)} • ${glazeSched.steps.length} steps`
+      };
+
+      if (btnIgnite) btnIgnite.disabled = false;
+      updateStudioSelectionDisplay(
+        glazeSched.name,
+        `Cone 6 (~2232°F) • ${calcScheduleDuration(glazeSched)} • ${glazeSched.steps.length} steps`,
+        'Ignite: Cone 6 Glaze',
+        true
+      );
+    } else {
+      updateStudioSelectionDisplay('Mid-Fire Glaze', 'No glaze schedule found in library', 'Ignite Kiln', false);
+      if (btnIgnite) btnIgnite.disabled = true;
+    }
+
+  } else if (cardId === 'qcard-custom') {
+    if (studioSel) studioSel.classList.remove('hidden');
+
+    if (studioSel && studioSel.value) {
+      const sched = state.schedules.find(s => s.id === studioSel.value);
+      if (sched) {
+        currentStudioSelection = {
+          type: 'custom',
+          scheduleId: sched.id,
+          label: sched.name,
+          details: `${sched.name} • ${sched.steps.length} steps • ${calcScheduleDuration(sched)}`
+        };
+        if (btnIgnite) btnIgnite.disabled = false;
+        updateStudioSelectionDisplay(
+          sched.name,
+          `${calcScheduleDuration(sched)} • ${sched.steps.length} steps • Ready to fire`,
+          `Ignite: ${sched.name}`,
+          true
+        );
+      }
+    } else {
+      currentStudioSelection = null;
+      if (btnIgnite) btnIgnite.disabled = true;
+      updateStudioSelectionDisplay(
+        'Library Schedule',
+        'Choose a saved program from the dropdown below to prime',
+        'Ignite Kiln',
+        false
+      );
+    }
+  }
+}
+
+function updateStudioSelectionDisplay(title, details, buttonText, isPrimed) {
+  const nameEl = document.getElementById('studio-sel-name');
+  const detailsEl = document.getElementById('studio-sel-details');
+  const btnText = document.getElementById('btn-studio-ignite-text');
+
+  if (nameEl) nameEl.textContent = title;
+  if (detailsEl) detailsEl.textContent = details;
+  if (btnText && buttonText) btnText.textContent = buttonText;
+}
+
+// ============================================================
 // BIND CONTROLS
 // ============================================================
 function bindControls() {
   // Tab nav
   // (already done in initTabs)
+
+  // Initialize Layout Switcher & Studio Controls
+  initLayoutSwitcher();
+  bindStudioControls();
 
   // Schedule select → enable start button and populate step selector
   const schedSel = document.getElementById('start-schedule-select');
@@ -1695,6 +2096,33 @@ function bindControls() {
     } catch (e) {
       toast('Failed to save learning state', 'error');
     }
+  });
+
+  // Controller engine mode save
+  const handleSaveControllerMode = async (selectedMode) => {
+    try {
+      const res = await fetch(API.settings, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ controllerMode: selectedMode })
+      });
+      state.settings = await res.json();
+      applySettingsToForm(state.settings);
+      const isStd = selectedMode === 'standard';
+      toast(isStd ? '⚡ Standard Classic Mode Active' : '🧠 Adaptive ML Mode Active', 'success');
+    } catch (e) {
+      toast('Failed to save control engine mode', 'error');
+    }
+  };
+
+  document.getElementById('btn-save-controller-mode')?.addEventListener('click', async () => {
+    const selectedMode = document.querySelector('input[name="controller-mode"]:checked')?.value || 'standard';
+    await handleSaveControllerMode(selectedMode);
+  });
+
+  document.getElementById('btn-save-controller-mode-calcifer')?.addEventListener('click', async () => {
+    const selectedMode = document.querySelector('input[name="controller-mode-calcifer"]:checked')?.value || 'standard';
+    await handleSaveControllerMode(selectedMode);
   });
 
   document.getElementById('btn-test-emporia')?.addEventListener('click', async () => {

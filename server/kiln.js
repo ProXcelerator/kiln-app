@@ -49,6 +49,24 @@ class Kiln extends EventEmitter {
     this._overshootHistory = thermalProfile ? (thermalProfile.overshootCorrections || {}) : {};
 
     this._ticker = null;
+    this._controllerMode = null;
+  }
+
+  getControllerMode() {
+    if (this._controllerMode) return this._controllerMode;
+    try {
+      const s = JSON.parse(fs.readFileSync(path.join(__dirname, 'data', 'settings.json'), 'utf8'));
+      this._controllerMode = s.controllerMode || 'standard';
+    } catch (e) {
+      this._controllerMode = 'standard';
+    }
+    return this._controllerMode;
+  }
+
+  setControllerMode(mode) {
+    this._controllerMode = (mode === 'predictive') ? 'predictive' : 'standard';
+    console.log(`[Kiln] Control engine switched to: ${this._controllerMode.toUpperCase()}`);
+    this.emit('stateChange', this.getStatus());
   }
 
   // ---- Public API ----
@@ -183,94 +201,94 @@ class Kiln extends EventEmitter {
     // Expose for the API status
     this.currentSetpoint = idealSetpoint;
 
-    // 2. Feed-Forward Predicted Temperature
-    // Combines two sources of knowledge:
-    //   A) Impulse response data: how much heat recent relay-on time will still add
-    //   B) Adaptive overshoot history: how much THIS kiln historically coasts at this temperature
+    // 2. Feed-Forward Predicted Temperature (Only in Predictive / ML Mode)
+    const isStandardMode = this.getControllerMode() === 'standard';
     let predictedCoastF = 0;
     let ceilingProtection = 1.0;
 
-    // MANDATORY: We MUST protect the final target ceiling of the step so we don't blow past it into a hold!
-    if (step.type === 'ramp' && step.targetTempF != null) {
-      const distanceToCeiling = Math.abs(step.targetTempF - kilnTempF);
-      ceilingProtection = distanceToCeiling > 25 ? 0 : (1.0 - (distanceToCeiling / 25));
-    }
-
-    // A) Impulse lookup prediction
-    if (thermalProfile && thermalProfile.lookup && Object.keys(thermalProfile.lookup).length > 0 && this._recentRelayOnMs > 0) {
-      const recentOnSec = this._recentRelayOnMs / 1000;
-      const keys = Object.keys(thermalProfile.lookup).map(Number).sort((a, b) => a - b);
-      let lower = keys[0], upper = keys[keys.length - 1];
-      for (const k of keys) {
-        if (k <= recentOnSec) lower = k;
-        if (k >= recentOnSec && upper === keys[keys.length - 1]) upper = k;
-      }
-      const lData = thermalProfile.lookup[String(lower)];
-      const uData = thermalProfile.lookup[String(upper)];
-      if (lower === upper) {
-        predictedCoastF = lData.deltaTempF;
-      } else {
-        const t = (recentOnSec - lower) / (upper - lower);
-        predictedCoastF = lData.deltaTempF + t * (uData.deltaTempF - lData.deltaTempF);
+    if (!isStandardMode) {
+      // MANDATORY: We MUST protect the final target ceiling of the step so we don't blow past it into a hold!
+      if (step.type === 'ramp' && step.targetTempF != null) {
+        const distanceToCeiling = Math.abs(step.targetTempF - kilnTempF);
+        ceilingProtection = distanceToCeiling > 25 ? 0 : (1.0 - (distanceToCeiling / 25));
       }
 
-      // Attenuate the impulse response at high temperatures due to extreme thermal dissipation
-      // 2400F acts as the baseline for zero coasting (heavy dampening).
-      const thermalAttenuation = Math.max(0.05, 1.0 - (kilnTempF / 2400));
-      predictedCoastF *= thermalAttenuation;
-
-      // MUTE predictive coasting on the moving ramp line at high temperatures!
-      // Below 1300°F, we gently pulse along the ramp line to learn and prevent any overshoot.
-      // Above 1400°F, we prioritize raw power to fight heat loss and maintain the strict ramp speed.
-      if (step.type === 'ramp') {
-        let rampFade = 1.0;
-        if (kilnTempF > 1300) {
-           rampFade = Math.max(0, 1.0 - ((kilnTempF - 1300) / 100)); // Fades to 0 at 1400F
+      // A) Impulse lookup prediction
+      if (thermalProfile && thermalProfile.lookup && Object.keys(thermalProfile.lookup).length > 0 && this._recentRelayOnMs > 0) {
+        const recentOnSec = this._recentRelayOnMs / 1000;
+        const keys = Object.keys(thermalProfile.lookup).map(Number).sort((a, b) => a - b);
+        let lower = keys[0], upper = keys[keys.length - 1];
+        for (const k of keys) {
+          if (k <= recentOnSec) lower = k;
+          if (k >= recentOnSec && upper === keys[keys.length - 1]) upper = k;
         }
-        
-        // Use whichever is higher: tracking the ramp line (if low temp) OR protecting the final ceiling
-        predictedCoastF *= Math.max(rampFade, ceilingProtection);
+        const lData = thermalProfile.lookup[String(lower)];
+        const uData = thermalProfile.lookup[String(upper)];
+        if (lower === upper) {
+          predictedCoastF = lData.deltaTempF;
+        } else {
+          const t = (recentOnSec - lower) / (upper - lower);
+          predictedCoastF = lData.deltaTempF + t * (uData.deltaTempF - lData.deltaTempF);
+        }
+
+        // Attenuate the impulse response at high temperatures due to extreme thermal dissipation
+        // 2400F acts as the baseline for zero coasting (heavy dampening).
+        const thermalAttenuation = Math.max(0.05, 1.0 - (kilnTempF / 2400));
+        predictedCoastF *= thermalAttenuation;
+
+        // MUTE predictive coasting on the moving ramp line at high temperatures!
+        // Below 1300°F, we gently pulse along the ramp line to learn and prevent any overshoot.
+        // Above 1400°F, we prioritize raw power to fight heat loss and maintain the strict ramp speed.
+        if (step.type === 'ramp') {
+          let rampFade = 1.0;
+          if (kilnTempF > 1300) {
+             rampFade = Math.max(0, 1.0 - ((kilnTempF - 1300) / 100)); // Fades to 0 at 1400F
+          }
+          
+          // Use whichever is higher: tracking the ramp line (if low temp) OR protecting the final ceiling
+          predictedCoastF *= Math.max(rampFade, ceilingProtection);
+        }
+      }
+
+      // Read adaptive learning live from settings file to allow mid-flight toggling
+      let applyAdaptive = true;
+      try {
+        const settings = JSON.parse(fs.readFileSync(path.join(__dirname, 'data/settings.json'), 'utf8'));
+        // Default to true. Explicitly checking for false allows background learning mode.
+        applyAdaptive = settings.applyAdaptiveLearning !== false;
+      } catch(e) {}
+
+      // B) Adaptive overshoot correction — learned from real past firings at this temperature
+      if (applyAdaptive && Object.keys(this._overshootHistory).length > 0 && step.targetTempF != null) {
+        const bucketKey = String(Math.round(step.targetTempF / 50) * 50);
+        const learnedOvershoot = this._overshootHistory[bucketKey];
+        if (learnedOvershoot != null && learnedOvershoot > 0) {
+          // Add a fraction of the learned overshoot, explicitly scaled by how close we are to the ceiling!
+          predictedCoastF += (learnedOvershoot * 0.6) * ceilingProtection;
+        }
+      }
+
+      // Override: If the physical kiln is lagging behind the schedule and the clock is paused,
+      // completely disable all coasting predictions so we sprint at 100% power to catch up.
+      if (this._isLagging) {
+        predictedCoastF = 0;
+      }
+
+      // C) Undershoot Catching (Element Thermal Lag Offset)
+      // If we are currently coasting downwards (relay is OFF) and the temperature is falling,
+      // the heavy elements will take time (~12 seconds) to physically heat up and reverse the drop.
+      if (!this.relayOn && dropRatePerSec > 0) {
+        const ELEMENT_THERMAL_LAG_SEC = 12;
+        // Subtract the expected fall from our prediction, artificially lowering effectiveTempF
+        // so the relay playfully clicks ON early to catch the drop before it goes under the setpoint!
+        predictedCoastF -= (dropRatePerSec * ELEMENT_THERMAL_LAG_SEC);
       }
     }
 
-    // Read adaptive learning live from settings file to allow mid-flight toggling
-    let applyAdaptive = true;
-    try {
-      const settings = JSON.parse(fs.readFileSync(path.join(__dirname, 'data/settings.json'), 'utf8'));
-      // Default to true. Explicitly checking for false allows background learning mode.
-      applyAdaptive = settings.applyAdaptiveLearning !== false;
-    } catch(e) {}
+    // Effective temperature: pure real temp in Standard mode; predictive in ML mode
+    const effectiveTempF = isStandardMode ? kilnTempF : (kilnTempF + predictedCoastF);
 
-    // B) Adaptive overshoot correction — learned from real past firings at this temperature
-    if (applyAdaptive && Object.keys(this._overshootHistory).length > 0 && step.targetTempF != null) {
-      const bucketKey = String(Math.round(step.targetTempF / 50) * 50);
-      const learnedOvershoot = this._overshootHistory[bucketKey];
-      if (learnedOvershoot != null && learnedOvershoot > 0) {
-        // Add a fraction of the learned overshoot, explicitly scaled by how close we are to the ceiling!
-        predictedCoastF += (learnedOvershoot * 0.6) * ceilingProtection;
-      }
-    }
-
-    // Override: If the physical kiln is lagging behind the schedule and the clock is paused,
-    // completely disable all coasting predictions so we sprint at 100% power to catch up.
-    if (this._isLagging) {
-      predictedCoastF = 0;
-    }
-
-    // C) Undershoot Catching (Element Thermal Lag Offset)
-    // If we are currently coasting downwards (relay is OFF) and the temperature is falling,
-    // the heavy elements will take time (~12 seconds) to physically heat up and reverse the drop.
-    if (!this.relayOn && dropRatePerSec > 0) {
-      const ELEMENT_THERMAL_LAG_SEC = 12;
-      // Subtract the expected fall from our prediction, artificially lowering effectiveTempF
-      // so the relay playfully clicks ON early to catch the drop before it goes under the setpoint!
-      predictedCoastF -= (dropRatePerSec * ELEMENT_THERMAL_LAG_SEC);
-    }
-
-    // Effective temperature = real temp + pulse prediction + learned overshoot correction - cooling offset
-    const effectiveTempF = kilnTempF + predictedCoastF;
-
-    // 3. Relay Control: Compare effectiveTempF (real + predicted coast) against setpoint
+    // 3. Relay Control: Compare effectiveTempF (real or predicted coast) against setpoint
     const HYSTERESIS = 1.0;
 
     if (effectiveTempF <= idealSetpoint - HYSTERESIS) {
@@ -296,7 +314,11 @@ class Kiln extends EventEmitter {
 
     // 4. Step Advancement - time-based to ensure schedule is respected
     if (step.type === 'ramp') {
-      console.log(`[PID] Real: ${Math.round(kilnTempF)}°F | +Coast: ${Math.round(predictedCoastF * 10) / 10}°F | Effective: ${Math.round(effectiveTempF)}°F | Setpoint: ${Math.round(idealSetpoint)}°F | Relay: ${this.relayOn ? 'ON' : 'OFF'}`);
+      if (isStandardMode) {
+        console.log(`[Standard] Temp: ${Math.round(kilnTempF)}°F | Target: ${Math.round(idealSetpoint)}°F | Relay: ${this.relayOn ? 'ON' : 'OFF'} | Duty: ${Math.round(this.dutyCycle || 0)}%`);
+      } else {
+        console.log(`[PID/ML] Real: ${Math.round(kilnTempF)}°F | +Coast: ${Math.round(predictedCoastF * 10) / 10}°F | Effective: ${Math.round(effectiveTempF)}°F | Setpoint: ${Math.round(idealSetpoint)}°F | Relay: ${this.relayOn ? 'ON' : 'OFF'}`);
+      }
 
       const direction = step.targetTempF >= this.stepStartTemp ? 1 : -1;
       let mathematicallyComplete = false;
@@ -347,7 +369,8 @@ class Kiln extends EventEmitter {
       isWaitingForCoolDown: this._isWaitingForCoolDown || false,
       trueHoldTimeMs: this._trueHoldTimeMs || 0,
       virtualCone: virtualCone.getLivePayload(),
-      projectedEndTime: this._projectEndTime()
+      projectedEndTime: this._projectEndTime(),
+      controllerMode: this.getControllerMode()
     };
   }
 
@@ -410,8 +433,12 @@ class Kiln extends EventEmitter {
 
   // Silently monitors temperature after a ramp step completes to measure real peak.
   // Updates the thermal profile on disk with the learned overshoot for this target temperature.
-  // Does nothing if adaptiveLearningEnabled is false in settings.json
+  // Does nothing if controllerMode is standard or adaptiveLearningEnabled is false in settings.json
   _measureCoastOvershoot(targetTempF, tempAtCompletion) {
+    if (this.getControllerMode() === 'standard') {
+      return; // Do not record ML overshoot in standard/deterministic mode
+    }
+
     // Check the live settings file to respect the learning lock
     try {
       const settings = JSON.parse(fs.readFileSync(path.join(__dirname, 'data', 'settings.json'), 'utf8'));

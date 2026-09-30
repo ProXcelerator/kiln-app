@@ -59,6 +59,16 @@
   </nav>
 
   <div class="header-status">
+    <div class="layout-switcher" id="layout-switcher" role="group" aria-label="Layout mode">
+      <button class="layout-toggle-btn active" data-layout="studio" id="btn-layout-studio" title="Studio Quick Action view">
+        <svg viewBox="0 0 20 20" fill="currentColor"><path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM14 11a1 1 0 011 1v1h1a1 1 0 110 2h-1v1a1 1 0 11-2 0v-1h-1a1 1 0 110-2h1v-1a1 1 0 011-1z"/></svg>
+        Studio
+      </button>
+      <button class="layout-toggle-btn" data-layout="classic" id="btn-layout-classic" title="Classic dropdown view">
+        <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd"/></svg>
+        Classic
+      </button>
+    </div>
     <div class="connection-badge" id="ws-badge">
       <span class="badge-dot"></span>
       <span class="badge-label">Connecting…</span>
@@ -116,9 +126,14 @@
             <span class="meta-label">Projected End</span>
             <span class="meta-value" id="projected-end">—</span>
           </div>
+          <div class="meta-item">
+            <span class="meta-label">Control Engine</span>
+            <span class="meta-value" id="active-control-mode" style="color:var(--ember); font-weight:600;">Classic</span>
+          </div>
         </div>
 
-        <div class="hero-controls">
+        <!-- Classic Controls Zone (Active in Classic View) -->
+        <div class="hero-controls classic-controls-zone" id="classic-controls-zone">
           <select class="schedule-select" id="start-schedule-select">
             <option value="">Select a schedule…</option>
           </select>
@@ -137,6 +152,103 @@
             <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z" clip-rule="evenodd"/></svg>
             Stop Firing
           </button>
+        </div>
+
+        <!-- Studio Quick Action Hub (Active in Studio View) -->
+        <div class="studio-quick-action-hub" id="studio-quick-hub">
+          <div class="quick-hub-header">
+            <div class="quick-hub-title-wrap">
+              <span class="quick-hub-badge">STUDIO LAUNCHER</span>
+              <span class="quick-hub-title">Quick Action Firings</span>
+            </div>
+            <span class="quick-hub-sub" id="quick-selected-label">Select a cycle below to prime</span>
+          </div>
+
+          <div class="quick-cards-grid" id="quick-cards-grid">
+            <!-- Card 1: Warm Up 250°F -->
+            <div class="quick-card qcard-warmup" data-action="warmup" id="qcard-warmup" role="button" tabindex="0">
+              <div class="qcard-top">
+                <span class="qcard-badge badge-amber">PREHEAT</span>
+                <span class="qcard-icon">♨️</span>
+              </div>
+              <div class="qcard-name">Warm Up (250°F)</div>
+              <div class="qcard-meta">
+                <span class="qcard-pill">250°F Target</span>
+                <span class="qcard-pill">180°/hr</span>
+              </div>
+              <div class="qcard-desc">Water-smoking candling hold for greenware</div>
+            </div>
+
+            <!-- Card 2: Bisque Cone 06 -->
+            <div class="quick-card" data-action="preset" data-preset-type="bisque" id="qcard-bisque" role="button" tabindex="0">
+              <div class="qcard-top">
+                <span class="qcard-badge badge-ember">CONE 06</span>
+                <span class="qcard-icon">🏺</span>
+              </div>
+              <div class="qcard-name">Bisque Firing</div>
+              <div class="qcard-meta">
+                <span class="qcard-pill">~1828°F</span>
+                <span class="qcard-pill">Burnout</span>
+              </div>
+              <div class="qcard-desc">Standard safe bisque for porous greenware</div>
+            </div>
+
+            <!-- Card 3: Glaze Cone 6 -->
+            <div class="quick-card" data-action="preset" data-preset-type="glaze" id="qcard-glaze" role="button" tabindex="0">
+              <div class="qcard-top">
+                <span class="qcard-badge badge-molten">CONE 6</span>
+                <span class="qcard-icon">✨</span>
+              </div>
+              <div class="qcard-name">Mid-Fire Glaze</div>
+              <div class="qcard-meta">
+                <span class="qcard-pill">~2232°F</span>
+                <span class="qcard-pill">Drop & Hold</span>
+              </div>
+              <div class="qcard-desc">Vitrification peak with pinhole healing soak</div>
+            </div>
+
+            <!-- Card 4: Other / Library -->
+            <div class="quick-card qcard-custom" data-action="custom" id="qcard-custom" role="button" tabindex="0">
+              <div class="qcard-top">
+                <span class="qcard-badge badge-slate">LIBRARY</span>
+                <span class="qcard-icon">📁</span>
+              </div>
+              <div class="qcard-name">All Schedules</div>
+              <div class="qcard-meta">
+                <span class="qcard-pill" id="qcard-library-count">Loading…</span>
+              </div>
+              <div class="qcard-desc">Choose from custom saved programs or steps</div>
+            </div>
+          </div>
+
+          <!-- Studio Action Control Strip -->
+          <div class="studio-action-strip" id="studio-action-strip">
+            <div class="studio-selection-summary">
+              <span class="studio-sel-label">Selected Cycle:</span>
+              <span class="studio-sel-name" id="studio-sel-name">None Selected</span>
+              <span class="studio-sel-details" id="studio-sel-details">Tap a firing card above to prime</span>
+            </div>
+
+            <div class="studio-action-buttons">
+              <!-- Custom schedule select dropdown (shown when Card 4 is active) -->
+              <select class="schedule-select studio-inline-select hidden" id="studio-dropdown-select">
+                <option value="">Choose saved schedule…</option>
+              </select>
+              <select class="schedule-select studio-inline-select hidden" id="studio-step-select" style="max-width: 140px;">
+                <option value="0">Start at Step 1</option>
+              </select>
+
+              <button class="btn btn-studio-ignite" id="btn-studio-ignite" disabled>
+                <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12.395 2.553a1 1 0 00-1.45-.385c-.345.23-.614.558-.822.88-.316.492-.533 1.035-.688 1.587a12.87 12.87 0 00-.45 2.502c-.08.79-.115 1.58-.104 2.37.008.57.06 1.137.155 1.7a3.003 3.003 0 01-2.148-1.748 6.544 6.544 0 01-.422-2.19 1 1 0 00-1.74-.694c-1.01 1.257-1.664 2.825-1.664 4.544 0 3.866 3.134 7 7 7s7-3.134 7-7c0-2.884-1.704-5.405-4.11-6.566z" clip-rule="evenodd"/></svg>
+                <span id="btn-studio-ignite-text">Ignite Kiln</span>
+              </button>
+
+              <button class="btn btn-stop hidden" id="btn-studio-stop">
+                <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z" clip-rule="evenodd"/></svg>
+                Stop Firing
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -346,6 +458,36 @@
           <input class="form-input" id="set-ai-api-key" type="password" placeholder="AIzaSy..." />
         </div>
         <button class="btn btn-primary" id="btn-save-ai">Save AI Config</button>
+      </div>
+
+      <div class="settings-card" id="card-controller-mode" style="border-color: rgba(255, 107, 53, 0.4);">
+        <h3 class="settings-card-title">🎛️ Kiln Control Engine</h3>
+        <p class="settings-desc">Choose between a standard deterministic schedule controller or the experimental machine-learning predictive engine.</p>
+        
+        <div style="display:flex; flex-direction:column; gap:0.75rem; margin-top:0.75rem;">
+          <label style="display:flex; align-items:flex-start; gap:0.75rem; cursor:pointer; padding:0.85rem; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:var(--radius-md);">
+            <input type="radio" name="controller-mode" value="standard" id="mode-standard" checked style="margin-top:0.25rem; accent-color:var(--ember); width:18px; height:18px; cursor:pointer;" />
+            <div>
+              <div style="font-weight:600; color:var(--text-primary); font-size:0.95rem;">⚡ Standard / Classic Control (Non-ML)</div>
+              <div style="font-size:0.8rem; color:var(--text-muted); margin-top:0.25rem; line-height:1.45;">
+                Standard industrial thermostat operation. Early stages gently pulse elements for short intervals (e.g. candling); middle stages increase on-time; late high-fire runs full power (near 100% duty cycle) to fight kiln heat loss; holds cycle to maintain target. No AI or predictive coasting overrides.
+              </div>
+            </div>
+          </label>
+
+          <label style="display:flex; align-items:flex-start; gap:0.75rem; cursor:pointer; padding:0.85rem; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:var(--radius-md);">
+            <input type="radio" name="controller-mode" value="predictive" id="mode-predictive" style="margin-top:0.25rem; accent-color:var(--ember); width:18px; height:18px; cursor:pointer;" />
+            <div>
+              <div style="font-weight:600; color:var(--text-primary); font-size:0.95rem;">🧠 Adaptive / Predictive Control (Machine Learning)</div>
+              <div style="font-size:0.8rem; color:var(--text-muted); margin-top:0.25rem; line-height:1.45;">
+                Uses impulse-response lookups from thermal profiles and adaptive overshoot learning to brake relays early and calculate virtual coasting heat.
+              </div>
+            </div>
+          </label>
+        </div>
+
+        <div id="controller-mode-status" style="font-size:0.8rem; color:var(--text-muted); margin-top:0.75rem;">—</div>
+        <button class="btn btn-primary" id="btn-save-controller-mode" style="margin-top:0.75rem;">Save Control Engine</button>
       </div>
 
       <div class="settings-card" style="border-color: rgba(255, 180, 50, 0.3);">

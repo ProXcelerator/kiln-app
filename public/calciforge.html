@@ -315,6 +315,23 @@
           <button class="btn btn-primary" id="btn-save-ai" style="margin-top:1rem;">Bind Spirit</button>
         </div>
 
+        <div class="settings-card glass-panel" id="card-controller-mode">
+          <h3 class="settings-card-title">🎛️ Hearth Control Engine</h3>
+          <p class="settings-desc">Choose between standard deterministic ritual pacing or the demon's predictive machine learning.</p>
+          <div style="display:flex; flex-direction:column; gap:0.5rem; margin-top:0.5rem;">
+            <label style="display:flex; align-items:center; gap:0.6rem; cursor:pointer;">
+              <input type="radio" name="controller-mode-calcifer" value="standard" id="mode-standard-calcifer" checked style="accent-color:var(--brand); width:18px; height:18px;" />
+              <span>⚡ Standard / Classic Hearth (Non-ML)</span>
+            </label>
+            <label style="display:flex; align-items:center; gap:0.6rem; cursor:pointer;">
+              <input type="radio" name="controller-mode-calcifer" value="predictive" id="mode-predictive-calcifer" style="accent-color:var(--brand); width:18px; height:18px;" />
+              <span>🧠 Demon Predictive Magic (Machine Learning)</span>
+            </label>
+          </div>
+          <div id="controller-mode-status-calcifer" style="font-size:0.8rem; margin-top:0.5rem; color:var(--brand);">—</div>
+          <button class="btn btn-primary" id="btn-save-controller-mode-calcifer" style="margin-top:0.75rem;">Set Control Engine</button>
+        </div>
+
         <div class="settings-card glass-panel">
           <h3 class="settings-card-title">🧠 Demon's Adaptive Learning</h3>
           <p class="settings-desc">Allow Calcifer to learn how fast your hearth coasts during cooling phases.</p>

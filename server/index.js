@@ -89,6 +89,7 @@ let liveSnapshot = {
   sensorMode: thermocouple.getMode(),
   emporiaConnected: emporia.isConfigured(),
   safetyStatus: safety.getStatus(),
+  controllerMode: kiln.getControllerMode(),
   timestamp: Date.now()
 };
 
@@ -166,6 +167,7 @@ async function telemetryLoop() {
     sensorMode: thermocouple.getMode(),
     emporiaConnected: emporia.isConfigured(),
     safetyStatus: safety.getStatus(),
+    controllerMode: kiln.getControllerMode(),
     timestamp: Date.now()
   };
 
@@ -527,6 +529,11 @@ app.put('/api/settings', (req, res) => {
 
   const merged = { ...current, ...update };
   fs.writeFileSync(SETTINGS_FILE, JSON.stringify(merged, null, 2));
+
+  // Switch controller engine if controllerMode changed
+  if (update.controllerMode) {
+    kiln.setControllerMode(update.controllerMode);
+  }
 
   // Trigger fresh weather fetch if location changed (but no longer live-polls)
   if (update.locationQuery) {
