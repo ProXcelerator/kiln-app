@@ -35,11 +35,15 @@ let state = {
   chartData: { labels: [], kilnTemps: [], ambientTemps: [] },
   chart: null,
   elapsedTimer: null,
-  // Full Firing Overview
+  // Full Firing Overview & Step Journey
   firingChart: null,
   firingStartTime: null,
   firingStartTemp: null,
-  prevKilnState: null
+  prevKilnState: null,
+  graphViewMode: 'all',
+  focusedStepIndex: null,
+  stepSegments: [],
+  activeScheduleId: null
 };
 
 // ============================================================
@@ -50,6 +54,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   initGaugeSvgDefs();
   initChart();
   bindControls();
+  bindGraphControls();
 
   // Await data loading before connecting WebSocket to prevent race conditions 
   // where telemetry arrives before schedules are loaded.
@@ -136,45 +141,48 @@ function onTelemetry(data) {
   pushChartData(data.kilnTempF, data.kilnStatus);
   updateSensorInfo(data);
 
-  // ---- Firing Overview Chart ----
+  // ---- Firing Overview Chart & Step Tracking ----
   const ks = data.kilnStatus;
   const currState = ks ? ks.state : 'IDLE';
+  const isFiring = currState === 'FIRING' || currState === 'HOLD';
 
-  // Detect a new firing starting or page reload while firing
-  if ((currState === 'FIRING' || currState === 'HOLD') && state.prevKilnState !== 'FIRING' && state.prevKilnState !== 'HOLD') {
-    const schedule = state.schedules.find(s => s.id === ks.scheduleId);
-    if (schedule) {
-      state.firingStartTime = ks.startTime ? new Date(ks.startTime) : new Date();
-      // Draw the idealized full curve starting from the actual physical temperature, skipping omitted steps
-      initFiringChart(schedule, data.kilnTempF, ks.stepIndex || 0);
-      
-      // Calculate how many minutes of the schedule we skipped if we started at a later step
-      let skippedMins = 0;
-      for (let i = 0; i < (ks.stepIndex || 0); i++) {
-        const s = schedule.steps[i];
-        if (s.type === 'ramp') {
-          const prevTarget = i === 0 ? 72 : (schedule.steps[i-1].targetTempF || schedule.steps[i-1].tempF || 72);
-          const delta = Math.abs(s.targetTempF - prevTarget);
-          skippedMins += (delta / (s.ratePerHour || 100)) * 60;
-        } else {
-          skippedMins += s.durationMinutes || 0;
-        }
+  if (isFiring) {
+    const activeSched = (state.schedules && state.schedules.find(s => s.id === ks.scheduleId))
+      || (ks.scheduleSteps && ks.scheduleSteps.length ? { id: ks.scheduleId, name: ks.scheduleName, steps: ks.scheduleSteps } : null);
+
+    if (activeSched) {
+      if (!state.firingChart || state.activeScheduleId !== activeSched.id) {
+        state.firingStartTime = ks.startTime ? new Date(ks.startTime) : new Date();
+        state.activeScheduleId = activeSched.id;
+        initFiringChart(activeSched, data.kilnTempF, 0);
       }
-      state.firingXOffset = skippedMins;
+
+      const elapsedMinutes = ks.elapsedSeconds != null
+        ? (ks.elapsedSeconds / 60)
+        : (state.firingStartTime ? (Date.now() - state.firingStartTime.getTime()) / 60000 : 0);
+
+      pushFiringActualData(elapsedMinutes, data.kilnTempF, ks.stepIndex, ks);
+      renderStepJourney(activeSched, ks.stepIndex, ks, data.kilnTempF);
+
+      const subTitle = document.getElementById('graph-main-subtitle');
+      if (subTitle) {
+        subTitle.textContent = `Active Firing: ${activeSched.name} • Step ${(ks.stepIndex || 0) + 1} of ${activeSched.steps.length}`;
+      }
     }
-  }
-
-  // Push live data to the overview chart if a firing is active
-  if ((currState === 'FIRING' || currState === 'HOLD') && state.firingChart && state.firingStartTime) {
-    const elapsedMinutes = (Date.now() - state.firingStartTime.getTime()) / 60000;
-    pushFiringActualData((state.firingXOffset || 0) + elapsedMinutes, data.kilnTempF);
-  }
-
-  // If firing just ended, reset so next firing re-initializes
-  if ((currState === 'IDLE' || currState === 'COMPLETE') &&
-      (state.prevKilnState === 'FIRING' || state.prevKilnState === 'HOLD')) {
-    state.firingStartTime = null;
-    state.firingXOffset = 0;
+  } else if (currState === 'COMPLETE') {
+    if (state.prevKilnState === 'FIRING' || state.prevKilnState === 'HOLD') {
+      const activeSched = state.schedules.find(s => s.id === ks.scheduleId);
+      if (activeSched) renderStepJourney(activeSched, activeSched.steps.length, ks, data.kilnTempF);
+    }
+  } else if (currState === 'IDLE') {
+    // If firing just ended, reset so next firing re-initializes
+    if (state.prevKilnState === 'FIRING' || state.prevKilnState === 'HOLD') {
+      state.firingStartTime = null;
+      state.firingXOffset = 0;
+      state.activeScheduleId = null;
+      const sched = (currentStudioSelection && state.schedules.find(s => s.id === currentStudioSelection.scheduleId)) || state.schedules[0];
+      if (sched) previewScheduleOnGraph(sched);
+    }
   }
 
   state.prevKilnState = currState;
@@ -414,11 +422,14 @@ function updateKilnStatus(status) {
   }
 
   // Step progress
-  if ((isFiring || s === 'COMPLETE') && status.totalSteps > 0) {
-    stepContainer.style.display = 'block';
-    renderStepTrack(status);
-  } else {
-    stepContainer.style.display = 'none';
+  const activeSched = (state.schedules && state.schedules.find(sch => sch.id === status.scheduleId))
+    || (status.scheduleSteps && status.scheduleSteps.length ? { id: status.scheduleId, name: status.scheduleName, steps: status.scheduleSteps } : null)
+    || (currentStudioSelection && state.schedules.find(sch => sch.id === currentStudioSelection.scheduleId))
+    || (state.schedules && state.schedules[0]);
+
+  if (activeSched && stepContainer) {
+    stepContainer.style.display = '';
+    renderStepJourney(activeSched, status.stepIndex, status, state.live?.kilnTempF);
   }
 }
 
@@ -430,35 +441,12 @@ function updateElapsed(startTime) {
 }
 
 function renderStepTrack(status) {
-  const track = document.getElementById('step-track');
-  const count = document.getElementById('step-progress-count');
-  if (!track) return;
-
-  // We only have stepIndex, not full schedule steps on client; use telemetry wisely
-  const total = status.totalSteps;
-  const current = status.stepIndex;
-  const state_name = status.state;
-
-  count.textContent = `Step ${current + 1} of ${total}`;
-
-  track.innerHTML = '';
-  for (let i = 0; i < total; i++) {
-    if (i > 0) {
-      const conn = document.createElement('div');
-      conn.className = 'step-connector';
-      track.appendChild(conn);
-    }
-    const pill = document.createElement('div');
-    pill.className = 'step-pill';
-
-    if (i < current || state_name === 'COMPLETE') {
-      pill.classList.add('done');
-    } else if (i === current && (state_name === 'FIRING' || state_name === 'HOLD')) {
-      pill.classList.add('active');
-    }
-
-    pill.textContent = `Step ${i + 1}`;
-    track.appendChild(pill);
+  const sched = (state.schedules && state.schedules.find(s => s.id === status.scheduleId))
+    || (status.scheduleSteps && status.scheduleSteps.length ? { id: status.scheduleId, name: status.scheduleName, steps: status.scheduleSteps } : null)
+    || (currentStudioSelection && state.schedules.find(s => s.id === currentStudioSelection.scheduleId))
+    || (state.schedules && state.schedules[0]);
+  if (sched) {
+    renderStepJourney(sched, status.stepIndex, status, state.live?.kilnTempF);
   }
 }
 
@@ -619,39 +607,308 @@ function pushChartData(kilnTemp, kilnStatus) {
 // FULL FIRING OVERVIEW CHART
 // ============================================================
 
-// Compute the ideal planned schedule curve
-function computeScheduleCurve(schedule, startTempF, startStepIndex = 0) {
-  const points = [{ x: 0, y: Math.round(startTempF) }];
-  let currentTempF = startTempF;
+// ============================================================
+// MASTER FIRING & STEP GRAPH SYSTEM
+// ============================================================
+
+function drawRoundRect(ctx, x, y, width, height, radius) {
+  if (width < 2 * radius) radius = width / 2;
+  if (height < 2 * radius) radius = height / 2;
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.arcTo(x + width, y, x + width, y + height, radius);
+  ctx.arcTo(x + width, y + height, x, y + height, radius);
+  ctx.arcTo(x, y + height, x, y, radius);
+  ctx.arcTo(x, y + width, x, y, radius);
+  ctx.closePath();
+}
+
+function formatDurationMinutes(min) {
+  if (min == null || isNaN(min)) return '—';
+  const m = Math.round(min);
+  const h = Math.floor(m / 60);
+  const remM = m % 60;
+  if (h > 0) return `${h}h ${remM}m`;
+  return `${remM}m`;
+}
+
+// Compute metadata and timeline span for each step in the schedule
+function computeStepSegments(schedule, startTempF = 72) {
+  if (!schedule || !schedule.steps || !schedule.steps.length) return [];
+  const segments = [];
+  let currentTemp = startTempF;
   let currentMinutes = 0;
 
-  for (let i = startStepIndex; i < schedule.steps.length; i++) {
-    const step = schedule.steps[i];
+  schedule.steps.forEach((step, index) => {
+    let durationMinutes = 0;
+    let targetTemp = currentTemp;
+
     if (step.type === 'ramp') {
-      const targetTempF = step.targetTempF;
-      const ratePerHour = step.ratePerHour || 100;
-      const deltaTemp = Math.abs(targetTempF - currentTempF);
-      const durationMinutes = (deltaTemp / ratePerHour) * 60;
-      currentMinutes += durationMinutes;
-      points.push({ x: Math.round(currentMinutes * 10) / 10, y: Math.round(targetTempF) });
-      currentTempF = targetTempF;
+      targetTemp = step.targetTempF != null ? step.targetTempF : currentTemp;
+      const rate = step.ratePerHour || 100;
+      const delta = Math.abs(targetTemp - currentTemp);
+      durationMinutes = (delta / rate) * 60;
     } else if (step.type === 'hold') {
-      // Flat line — add both start and end of hold to keep it horizontal
-      points.push({ x: Math.round(currentMinutes * 10) / 10, y: Math.round(currentTempF) });
-      currentMinutes += step.durationMinutes;
-      points.push({ x: Math.round(currentMinutes * 10) / 10, y: Math.round(currentTempF) });
+      targetTemp = step.tempF != null ? step.tempF : currentTemp;
+      durationMinutes = step.durationMinutes || 0;
+    }
+
+    const startMinutes = currentMinutes;
+    const endMinutes = currentMinutes + durationMinutes;
+
+    segments.push({
+      index,
+      stepNumber: index + 1,
+      type: step.type,
+      label: step.label || (step.type === 'ramp' ? `Ramp to ${targetTemp}°F` : `Hold at ${targetTemp}°F`),
+      startTempF: Math.round(currentTemp),
+      targetTempF: Math.round(targetTemp),
+      ratePerHour: step.ratePerHour || null,
+      durationMinutes: Math.round(durationMinutes * 10) / 10,
+      startMinutes: Math.round(startMinutes * 10) / 10,
+      endMinutes: Math.round(endMinutes * 10) / 10
+    });
+
+    currentMinutes = endMinutes;
+    currentTemp = targetTemp;
+  });
+
+  return segments;
+}
+
+// Compute the ideal planned schedule curve coordinates
+function computeScheduleCurve(schedule, startTempF = 72, startStepIndex = 0) {
+  const segments = computeStepSegments(schedule, startTempF);
+  const points = [];
+  
+  if (!segments.length) {
+    return [{ x: 0, y: Math.round(startTempF) }];
+  }
+
+  // Initial starting point
+  points.push({ x: 0, y: Math.round(startTempF) });
+
+  for (let i = startStepIndex; i < segments.length; i++) {
+    const seg = segments[i];
+    if (seg.type === 'ramp') {
+      points.push({ x: seg.endMinutes, y: seg.targetTempF, stepIndex: seg.index, label: seg.label });
+    } else if (seg.type === 'hold') {
+      points.push({ x: seg.startMinutes, y: seg.targetTempF, stepIndex: seg.index, label: seg.label });
+      points.push({ x: seg.endMinutes, y: seg.targetTempF, stepIndex: seg.index, label: seg.label });
     }
   }
 
   return points;
 }
 
-function initFiringChart(schedule, startTempF, startStepIndex = 0) {
+function calculateStepProgressFallback(step, status, currentTemp) {
+  if (!step) return 0;
+  if (step.type === 'ramp') {
+    const from = (status && status.stepStartTemp != null) ? status.stepStartTemp : 72;
+    const to = step.targetTempF || from;
+    const delta = Math.abs(to - from);
+    if (delta <= 0) return 100;
+    const progress = Math.abs((currentTemp || from) - from);
+    return Math.min(100, Math.max(0, Math.round((progress / delta) * 100)));
+  } else if (step.type === 'hold') {
+    const totalSec = (step.durationMinutes || 1) * 60;
+    const elapsedSec = Math.floor((status?.trueHoldTimeMs || 0) / 1000);
+    return Math.min(100, Math.max(0, Math.round((elapsedSec / totalSec) * 100)));
+  }
+  return 0;
+}
+
+// Custom Chart.js plugin to draw step visual zones, dividers, badges, and the live NOW cursor
+const stepProgressChartPlugin = {
+  id: 'stepProgressChartPlugin',
+  beforeDraw(chart) {
+    const { ctx, chartArea, scales } = chart;
+    if (!chartArea || !scales.x || !scales.y || !chart.stepSegments) return;
+    const { left, right, top, bottom, height } = chartArea;
+    const xScale = scales.x;
+    const segments = chart.stepSegments;
+    const activeIdx = chart.activeStepIndex != null ? chart.activeStepIndex : -1;
+    const isFiring = chart.isFiringActive;
+
+    ctx.save();
+    segments.forEach((seg, i) => {
+      const xStart = Math.max(left, Math.min(right, xScale.getPixelForValue(seg.startMinutes)));
+      const xEnd = Math.max(left, Math.min(right, xScale.getPixelForValue(seg.endMinutes)));
+      const segWidth = xEnd - xStart;
+      if (segWidth <= 0) return;
+
+      // 1. Shading background
+      if (isFiring && i === activeIdx) {
+        // Active step glowing vertical amber column
+        const grad = ctx.createLinearGradient(0, top, 0, bottom);
+        grad.addColorStop(0, 'rgba(255, 107, 53, 0.18)');
+        grad.addColorStop(0.4, 'rgba(255, 107, 53, 0.08)');
+        grad.addColorStop(1, 'rgba(255, 107, 53, 0.02)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(xStart, top, segWidth, height);
+
+        // Highlight border
+        ctx.strokeStyle = 'rgba(255, 107, 53, 0.35)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(xStart, top, segWidth, height);
+      } else if (isFiring && i < activeIdx) {
+        // Completed step
+        ctx.fillStyle = 'rgba(76, 175, 80, 0.04)';
+        ctx.fillRect(xStart, top, segWidth, height);
+      } else if (i % 2 === 1) {
+        // Subtle alternating band
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.015)';
+        ctx.fillRect(xStart, top, segWidth, height);
+      }
+
+      // 2. Vertical Divider line
+      if (i > 0 && xStart >= left && xStart <= right) {
+        ctx.setLineDash([4, 4]);
+        ctx.strokeStyle = (isFiring && (i === activeIdx || i === activeIdx + 1))
+          ? 'rgba(255, 107, 53, 0.5)'
+          : 'rgba(255, 255, 255, 0.12)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(xStart, top);
+        ctx.lineTo(xStart, bottom);
+        ctx.stroke();
+      }
+    });
+    ctx.restore();
+  },
+
+  afterDraw(chart) {
+    const { ctx, chartArea, scales } = chart;
+    if (!chartArea || !scales.x || !scales.y || !chart.stepSegments) return;
+    const { left, right, top, bottom } = chartArea;
+    const xScale = scales.x;
+    const segments = chart.stepSegments;
+    const activeIdx = chart.activeStepIndex != null ? chart.activeStepIndex : -1;
+    const isFiring = chart.isFiringActive;
+    const elapsedMins = chart.currentElapsedMinutes;
+
+    ctx.save();
+
+    // 1. Draw Step Header Badges along the top of each step column
+    segments.forEach((seg, i) => {
+      const xStart = xScale.getPixelForValue(seg.startMinutes);
+      const xEnd = xScale.getPixelForValue(seg.endMinutes);
+      const colWidth = xEnd - xStart;
+      if (colWidth < 28 || xStart > right || xEnd < left) return;
+
+      const badgeX = Math.max(left + 8, Math.min(right - 70, (xStart + xEnd) / 2));
+      const isActive = isFiring && i === activeIdx;
+      const isDone = isFiring && i < activeIdx;
+
+      const badgeText = colWidth > 85
+        ? `Step ${seg.stepNumber}: ${seg.type === 'ramp' ? seg.targetTempF + '°' : seg.durationMinutes + 'm'}`
+        : `S${seg.stepNumber}`;
+
+      ctx.font = '600 10px Outfit, sans-serif';
+      const textWidth = ctx.measureText(badgeText).width;
+      const padX = 7;
+      const pillW = textWidth + padX * 2 + (isActive ? 10 : 0);
+      const pillH = 18;
+      const pillX = Math.max(left + 4, Math.min(right - pillW - 4, badgeX - pillW / 2));
+      const pillY = top + 6;
+
+      drawRoundRect(ctx, pillX, pillY, pillW, pillH, 9);
+      if (isActive) {
+        ctx.fillStyle = 'rgba(255, 107, 53, 0.9)';
+        ctx.shadowColor = 'rgba(255, 107, 53, 0.6)';
+        ctx.shadowBlur = 8;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        // Pulsing white dot
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(pillX + 8, pillY + 9, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillText(badgeText, pillX + 15, pillY + 12.5);
+      } else if (isDone) {
+        ctx.fillStyle = 'rgba(76, 175, 80, 0.15)';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(76, 175, 80, 0.4)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        ctx.fillStyle = '#81c784';
+        ctx.fillText(badgeText, pillX + padX, pillY + 12.5);
+      } else {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.07)';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        ctx.fillStyle = '#9898b8';
+        ctx.fillText(badgeText, pillX + padX, pillY + 12.5);
+      }
+    });
+
+    // 2. Draw "NOW" Live Firing Cursor Line
+    if (isFiring && elapsedMins != null && elapsedMins >= 0) {
+      const xNow = xScale.getPixelForValue(elapsedMins);
+      if (xNow >= left && xNow <= right) {
+        // Glowing vertical line
+        ctx.shadowColor = '#ff6b35';
+        ctx.shadowBlur = 10;
+        ctx.strokeStyle = '#ff6b35';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.moveTo(xNow, top);
+        ctx.lineTo(xNow, bottom);
+        ctx.stroke();
+
+        // Bead on current actual temperature
+        const tempF = chart.currentKilnTempF;
+        if (tempF != null) {
+          const yNow = scales.y.getPixelForValue(tempF);
+          if (yNow >= top && yNow <= bottom) {
+            ctx.fillStyle = 'rgba(255, 107, 53, 0.4)';
+            ctx.beginPath();
+            ctx.arc(xNow, yNow, 9, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(xNow, yNow, 3.5, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+
+        // Top Flag
+        const flagText = tempF != null ? `NOW • ${Math.round(tempF)}°F` : 'NOW';
+        ctx.font = '700 9px "JetBrains Mono", monospace';
+        const flagW = ctx.measureText(flagText).width + 10;
+        const flagH = 16;
+        const flagX = Math.max(left, Math.min(right - flagW, xNow - flagW / 2));
+        const flagY = top + 28;
+
+        drawRoundRect(ctx, flagX, flagY, flagW, flagH, 4);
+        ctx.fillStyle = '#ff6b35';
+        ctx.shadowColor = 'rgba(255, 107, 53, 0.7)';
+        ctx.shadowBlur = 6;
+        ctx.fill();
+
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(flagText, flagX + 5, flagY + 11.5);
+      }
+    }
+
+    ctx.restore();
+  }
+};
+
+function initFiringChart(schedule, startTempF = 72, startStepIndex = 0) {
   const canvas = document.getElementById('firing-overview-chart');
   const placeholder = document.getElementById('firing-overview-placeholder');
-  if (!canvas) return;
+  if (!canvas || !schedule) return;
 
-  // Destroy old chart if one exists
   if (state.firingChart) {
     state.firingChart.destroy();
     state.firingChart = null;
@@ -660,8 +917,11 @@ function initFiringChart(schedule, startTempF, startStepIndex = 0) {
   canvas.style.display = 'block';
   if (placeholder) placeholder.style.display = 'none';
 
+  state.stepSegments = computeStepSegments(schedule, startTempF);
   const plannedCurve = computeScheduleCurve(schedule, startTempF, startStepIndex);
-  const totalMinutes = plannedCurve[plannedCurve.length - 1]?.x || 60;
+  const totalMinutes = state.stepSegments.length
+    ? state.stepSegments[state.stepSegments.length - 1].endMinutes
+    : (plannedCurve[plannedCurve.length - 1]?.x || 60);
 
   const ctx = canvas.getContext('2d');
   state.firingChart = new Chart(ctx, {
@@ -670,26 +930,27 @@ function initFiringChart(schedule, startTempF, startStepIndex = 0) {
       datasets: [
         {
           label: 'Actual Temp (°F)',
-          data: [], // grows over time: {x: elapsedMinutes, y: tempF}
+          data: [],
           borderColor: '#ff6b35',
-          backgroundColor: 'rgba(255,107,53,0.15)',
-          borderWidth: 2,
+          backgroundColor: 'rgba(255,107,53,0.18)',
+          borderWidth: 2.5,
           pointRadius: 0,
           showLine: true,
           fill: true,
-          tension: 0.3,
-          yAxisID: 'y'
+          tension: 0.25,
+          yAxisID: 'y',
+          order: 1
         },
         {
           label: 'Planned Schedule (°F)',
           data: plannedCurve,
-          borderColor: 'rgba(100,200,255,0.8)',
+          borderColor: 'rgba(100,200,255,0.85)',
           backgroundColor: 'transparent',
-          borderWidth: 1.5,
+          borderWidth: 1.8,
           pointRadius: 0,
           showLine: true,
           fill: false,
-          tension: 0.1,
+          tension: 0.05,
           borderDash: [6, 4],
           order: 2,
           yAxisID: 'y'
@@ -710,6 +971,7 @@ function initFiringChart(schedule, startTempF, startStepIndex = 0) {
         }
       ]
     },
+    plugins: [stepProgressChartPlugin],
     options: {
       responsive: true,
       maintainAspectRatio: false,
@@ -718,18 +980,27 @@ function initFiringChart(schedule, startTempF, startStepIndex = 0) {
       plugins: {
         legend: { display: false },
         tooltip: {
-          backgroundColor: 'rgba(26,26,36,0.95)',
-          borderColor: 'rgba(255,107,53,0.3)',
+          backgroundColor: 'rgba(20,20,30,0.95)',
+          borderColor: 'rgba(255,107,53,0.35)',
           borderWidth: 1,
           titleColor: '#9898b8',
           bodyColor: '#f0f0f8',
+          padding: 10,
           callbacks: {
             title: items => {
               const mins = items[0]?.parsed?.x;
               if (mins == null) return '';
               const h = Math.floor(mins / 60);
               const m = Math.round(mins % 60);
-              return `${h}h ${String(m).padStart(2,'0')}m elapsed`;
+              return `${h > 0 ? h + 'h ' : ''}${m}m elapsed`;
+            },
+            beforeBody: items => {
+              const mins = items[0]?.parsed?.x;
+              if (mins == null || !state.stepSegments) return '';
+              const seg = state.stepSegments.find(s => mins >= s.startMinutes && mins <= s.endMinutes)
+                || state.stepSegments[state.stepSegments.length - 1];
+              if (!seg) return '';
+              return `Step ${seg.stepNumber}: ${seg.label} (${seg.type === 'ramp' ? seg.targetTempF + '°F' : seg.durationMinutes + 'm'})`;
             },
             label: ctx => {
               if (ctx.dataset.label.includes('Ramp')) {
@@ -749,18 +1020,18 @@ function initFiringChart(schedule, startTempF, startStepIndex = 0) {
           type: 'linear',
           min: 0,
           max: totalMinutes,
-          grid: { color: 'rgba(255,255,255,0.04)' },
+          grid: { color: 'rgba(255,255,255,0.05)' },
           ticks: {
-            color: '#5a5a78',
-            font: { size: 10 },
-            maxTicksLimit: 8,
+            color: '#8888aa',
+            font: { size: 10, family: 'JetBrains Mono' },
+            maxTicksLimit: 10,
             callback: v => {
               const h = Math.floor(v / 60);
               const m = Math.round(v % 60);
               return h > 0 ? `${h}h${String(m).padStart(2,'0')}m` : `${m}m`;
             }
           },
-          title: { display: true, text: 'Elapsed Time', color: '#5a5a78', font: { size: 10 } }
+          title: { display: true, text: 'Firing Timeline (Elapsed Minutes)', color: '#686888', font: { size: 10 } }
         },
         y: {
           type: 'linear', position: 'left',
@@ -776,17 +1047,38 @@ function initFiringChart(schedule, startTempF, startStepIndex = 0) {
       }
     }
   });
+
+  state.firingChart.totalPlannedMinutes = totalMinutes;
+  state.firingChart.stepSegments = state.stepSegments;
+  state.firingChart.activeStepIndex = 0;
+  state.firingChart.isFiringActive = false;
+  state.firingChart.currentElapsedMinutes = 0;
 }
 
-function pushFiringActualData(elapsedMinutes, kilnTempF) {
+function pushFiringActualData(elapsedMinutes, kilnTempF, activeStepIndex, kilnStatus) {
   if (!state.firingChart || kilnTempF == null) return;
   
   const currentX = Math.round(elapsedMinutes * 10) / 10;
+  state.firingChart.currentElapsedMinutes = currentX;
+  state.firingChart.currentKilnTempF = kilnTempF;
+  state.firingChart.activeStepIndex = activeStepIndex != null ? activeStepIndex : 0;
+  state.firingChart.isFiringActive = true;
+
   const actualDs = state.firingChart.data.datasets.find(d => d.label.includes('Actual Temp'));
   const rateDs = state.firingChart.data.datasets.find(d => d.label.includes('Ramp Rate'));
 
   if (actualDs) {
-    actualDs.data.push({ x: currentX, y: Math.round(kilnTempF) });
+    const lastPt = actualDs.data[actualDs.data.length - 1];
+    if (!lastPt || Math.abs(lastPt.x - currentX) >= 0.05) {
+      actualDs.data.push({ x: currentX, y: Math.round(kilnTempF) });
+    } else {
+      lastPt.y = Math.round(kilnTempF);
+    }
+
+    // Auto-expand X-axis if actual firing runs longer than planned
+    if (currentX > state.firingChart.options.scales.x.max && state.graphViewMode === 'all') {
+      state.firingChart.options.scales.x.max = Math.ceil((currentX + 30) / 30) * 30;
+    }
 
     // Compute live ramp rate every 30 mins
     if (rateDs && actualDs.data.length > 0) {
@@ -806,6 +1098,237 @@ function pushFiringActualData(elapsedMinutes, kilnTempF) {
   state.firingChart.update('none');
 }
 
+function setGraphView(viewMode, targetStepIndex = null) {
+  state.graphViewMode = viewMode;
+  state.focusedStepIndex = targetStepIndex;
+
+  const btnAll = document.getElementById('btn-view-all');
+  const btnStep = document.getElementById('btn-view-step');
+  const btnLive = document.getElementById('btn-view-live');
+  const overviewCanvas = document.getElementById('firing-overview-chart');
+  const tempCanvas = document.getElementById('temp-chart');
+
+  [btnAll, btnStep, btnLive].forEach(b => b && b.classList.remove('active'));
+
+  if (viewMode === 'live') {
+    if (btnLive) btnLive.classList.add('active');
+    if (overviewCanvas) overviewCanvas.style.display = 'none';
+    if (tempCanvas) tempCanvas.style.display = 'block';
+    if (state.chart) state.chart.resize();
+    return;
+  }
+
+  if (overviewCanvas) overviewCanvas.style.display = 'block';
+  if (tempCanvas) tempCanvas.style.display = 'none';
+
+  if (!state.firingChart) return;
+
+  const totalMin = state.firingChart.totalPlannedMinutes || 60;
+
+  if (viewMode === 'all') {
+    if (btnAll) btnAll.classList.add('active');
+    state.firingChart.options.scales.x.min = 0;
+    state.firingChart.options.scales.x.max = Math.max(totalMin, (state.firingChart.currentElapsedMinutes || 0) + 10);
+    delete state.firingChart.options.scales.y.min;
+    delete state.firingChart.options.scales.y.max;
+    state.firingChart.options.scales.y.suggestedMin = 0;
+  } else if (viewMode === 'step') {
+    if (btnStep) btnStep.classList.add('active');
+    const stepIdx = targetStepIndex != null
+      ? targetStepIndex
+      : (state.live?.kilnStatus?.stepIndex || 0);
+
+    const seg = state.stepSegments && state.stepSegments[stepIdx];
+    if (seg) {
+      state.firingChart.options.scales.x.min = Math.max(0, seg.startMinutes - 1);
+      state.firingChart.options.scales.x.max = seg.endMinutes + 1;
+      const minTemp = Math.min(seg.startTempF, seg.targetTempF);
+      const maxTemp = Math.max(seg.startTempF, seg.targetTempF);
+      const pad = Math.max(30, (maxTemp - minTemp) * 0.15);
+      state.firingChart.options.scales.y.min = Math.max(0, Math.floor((minTemp - pad) / 50) * 50);
+      state.firingChart.options.scales.y.max = Math.ceil((maxTemp + pad) / 50) * 50;
+    }
+  }
+
+  state.firingChart.resize();
+  state.firingChart.update();
+}
+
+function previewScheduleOnGraph(schedule) {
+  if (!schedule || !schedule.steps || !schedule.steps.length) return;
+  const tempF = (state.live && state.live.kilnTempF) || 72;
+  initFiringChart(schedule, tempF, 0);
+  renderStepJourney(schedule, 0, null, tempF);
+  const subTitle = document.getElementById('graph-main-subtitle');
+  if (subTitle) {
+    subTitle.textContent = `Schedule Preview: ${schedule.name} • ${schedule.steps.length} Steps • ${calcScheduleDuration(schedule)}`;
+  }
+}
+
+function renderStepJourney(schedule, activeStepIndex, kilnStatus, kilnTempF) {
+  const container = document.getElementById('step-progress-container');
+  const track = document.getElementById('step-track');
+  const count = document.getElementById('step-progress-count');
+  const banner = document.getElementById('active-step-banner');
+  if (!track || !schedule || !schedule.steps) return;
+
+  const total = schedule.steps.length;
+  const isFiring = kilnStatus && (kilnStatus.state === 'FIRING' || kilnStatus.state === 'HOLD');
+  const isComplete = kilnStatus && kilnStatus.state === 'COMPLETE';
+  const currentIdx = activeStepIndex != null ? activeStepIndex : (isComplete ? total : 0);
+
+  // 1. Update Header
+  if (count) {
+    if (isFiring) {
+      count.textContent = `Step ${currentIdx + 1} of ${total} active`;
+    } else if (isComplete) {
+      count.textContent = `All ${total} steps complete`;
+    } else {
+      count.textContent = `${total} steps planned (${calcScheduleDuration(schedule)})`;
+    }
+  }
+
+  // 2. Active Step Hero Banner
+  if (banner) {
+    if (isFiring && schedule.steps[currentIdx]) {
+      banner.style.display = 'grid';
+      const step = schedule.steps[currentIdx];
+      const pill = document.getElementById('active-step-pill');
+      const typePill = document.getElementById('active-step-type');
+      const statusChip = document.getElementById('active-step-status');
+      const nameEl = document.getElementById('active-step-name');
+      const detailsEl = document.getElementById('active-step-details');
+      const pctEl = document.getElementById('active-step-pct');
+      const barFill = document.getElementById('active-step-bar-fill');
+      const subtextEl = document.getElementById('active-step-subtext');
+      const elapsedEl = document.getElementById('active-step-elapsed');
+      const remEl = document.getElementById('active-step-remaining');
+      const totalProgEl = document.getElementById('active-total-progress');
+
+      if (pill) pill.textContent = `STEP ${currentIdx + 1} OF ${total}`;
+      if (typePill) typePill.textContent = step.type.toUpperCase();
+      if (statusChip) {
+        statusChip.textContent = kilnStatus.isWaitingForCoolDown ? 'COOLING' : (step.type === 'hold' ? 'HOLDING' : 'HEATING');
+      }
+      if (nameEl) nameEl.textContent = step.label || (step.type === 'ramp' ? `Ramp to ${step.targetTempF}°F` : `Hold at ${step.tempF}°F`);
+      if (detailsEl) {
+        detailsEl.textContent = step.type === 'ramp'
+          ? `Target: ${step.targetTempF}°F @ ${step.ratePerHour || 100}°F/hr`
+          : `Soak at ${step.tempF}°F for ${step.durationMinutes} min`;
+      }
+
+      const progressPct = kilnStatus.stepProgressPercent != null
+        ? kilnStatus.stepProgressPercent
+        : calculateStepProgressFallback(step, kilnStatus, kilnTempF);
+
+      if (pctEl) pctEl.textContent = `${progressPct}%`;
+      if (barFill) barFill.style.width = `${progressPct}%`;
+
+      if (subtextEl) {
+        if (step.type === 'ramp') {
+          const from = kilnStatus.stepStartTemp != null ? Math.round(kilnStatus.stepStartTemp) : 72;
+          subtextEl.textContent = `Current: ${Math.round(kilnTempF || 72)}°F / Target: ${step.targetTempF}°F (from ${from}°F)`;
+        } else {
+          const holdElapsedMin = Math.floor((kilnStatus.trueHoldTimeMs || 0) / 60000);
+          subtextEl.textContent = `Hold elapsed: ${holdElapsedMin}m of ${step.durationMinutes}m`;
+        }
+      }
+
+      if (elapsedEl) {
+        const stepSec = kilnStatus.stepElapsedSeconds != null
+          ? kilnStatus.stepElapsedSeconds
+          : (kilnStatus.stepStartTime ? Math.floor((Date.now() - kilnStatus.stepStartTime) / 1000) : 0);
+        elapsedEl.textContent = formatDuration(stepSec);
+      }
+
+      if (remEl) {
+        if (kilnStatus.stepRemainingSeconds != null) {
+          remEl.textContent = formatDurationMinutes(Math.round(kilnStatus.stepRemainingSeconds / 60));
+        } else {
+          remEl.textContent = '—';
+        }
+      }
+
+      if (totalProgEl) {
+        const overallPct = Math.min(100, Math.round(((currentIdx + (progressPct / 100)) / total) * 100));
+        totalProgEl.textContent = `${overallPct}%`;
+      }
+    } else {
+      banner.style.display = 'none';
+    }
+  }
+
+  // 3. Step Track Rail
+  track.innerHTML = '';
+  const segments = state.stepSegments && state.stepSegments.length ? state.stepSegments : computeStepSegments(schedule, kilnTempF || 72);
+
+  segments.forEach((seg, i) => {
+    const isDone = isFiring ? i < currentIdx : isComplete;
+    const isActive = isFiring && i === currentIdx;
+    const isUpcoming = isFiring ? i > currentIdx : !isComplete;
+
+    let progress = 0;
+    if (isDone) progress = 100;
+    else if (isActive) {
+      progress = kilnStatus.stepProgressPercent != null
+        ? kilnStatus.stepProgressPercent
+        : calculateStepProgressFallback(schedule.steps[i], kilnStatus, kilnTempF);
+    }
+
+    const card = document.createElement('div');
+    card.className = `step-journey-card ${isActive ? 'active' : (isDone ? 'done' : 'upcoming')}`;
+    card.dataset.stepIndex = i;
+    card.setAttribute('role', 'button');
+    card.setAttribute('tabindex', '0');
+
+    const statusBadge = isDone
+      ? '<span style="color:var(--success); font-weight:700; font-size:0.65rem;">✓ DONE</span>'
+      : isActive
+        ? '<span style="color:var(--ember); font-weight:700; font-size:0.65rem;">⚡ ACTIVE</span>'
+        : '<span style="color:var(--text-muted); font-size:0.65rem;">⏳ UPCOMING</span>';
+
+    card.innerHTML = `
+      <div class="step-card-top">
+        <div class="step-icon-badge">
+          <span class="step-symbol">${isDone ? '✓' : (isActive ? '⚡' : (i + 1))}</span>
+          <span>Step ${i + 1}</span>
+        </div>
+        <span class="step-card-type-chip ${seg.type}">${seg.type.toUpperCase()}</span>
+        ${statusBadge}
+      </div>
+      <div class="step-card-title">${escHtml(seg.label)}</div>
+      <div class="step-card-metrics">
+        <span class="step-metric-target">${seg.type === 'ramp' ? `→ ${seg.targetTempF}°F` : `${seg.targetTempF}°F`}</span>
+        <span class="step-metric-rate">${seg.type === 'ramp' ? `@ ${seg.ratePerHour}°F/hr` : `for ${seg.durationMinutes}m`}</span>
+      </div>
+      <div class="step-card-bar-track">
+        <div class="step-card-bar-fill" style="width: ${progress}%;"></div>
+      </div>
+      <div class="step-card-footer">
+        <span class="step-card-duration">⏱ ${formatDurationMinutes(seg.durationMinutes)}</span>
+        <span class="step-card-pct">${progress}%</span>
+      </div>
+    `;
+
+    // Click to focus step
+    card.addEventListener('click', () => {
+      setGraphView('step', i);
+    });
+
+    track.appendChild(card);
+  });
+}
+
+function bindGraphControls() {
+  const btnAll = document.getElementById('btn-view-all');
+  const btnStep = document.getElementById('btn-view-step');
+  const btnLive = document.getElementById('btn-view-live');
+
+  if (btnAll) btnAll.addEventListener('click', () => setGraphView('all'));
+  if (btnStep) btnStep.addEventListener('click', () => setGraphView('step'));
+  if (btnLive) btnLive.addEventListener('click', () => setGraphView('live'));
+}
+
 // ============================================================
 // SCHEDULES
 // ============================================================
@@ -815,6 +1338,13 @@ async function loadSchedules() {
     state.schedules = await res.json();
     renderSchedules();
     populateScheduleSelect();
+
+    // If kiln is idle, prime the graph with the first/default schedule
+    const isFiring = state.live?.kilnStatus && (state.live.kilnStatus.state === 'FIRING' || state.live.kilnStatus.state === 'HOLD');
+    if (!isFiring && state.schedules.length > 0 && !state.firingChart) {
+      const defaultSched = state.schedules.find(s => s.id === 'schedule-med-bisque-06') || state.schedules[0];
+      previewScheduleOnGraph(defaultSched);
+    }
   } catch (e) {
     console.error('Failed to load schedules', e);
   }
@@ -1794,6 +2324,10 @@ function bindStudioControls() {
           `Ignite: ${sched.name}`,
           true
         );
+
+        if (!state.live?.kilnStatus || (state.live.kilnStatus.state !== 'FIRING' && state.live.kilnStatus.state !== 'HOLD')) {
+          previewScheduleOnGraph(sched);
+        }
       }
     });
   }
@@ -1850,6 +2384,7 @@ function selectStudioCard(cardId) {
   const studioSel = document.getElementById('studio-dropdown-select');
   const studioStepSel = document.getElementById('studio-step-select');
   const btnIgnite = document.getElementById('btn-studio-ignite');
+  const isFiring = state.live?.kilnStatus && (state.live.kilnStatus.state === 'FIRING' || state.live.kilnStatus.state === 'HOLD');
 
   if (cardId === 'qcard-warmup') {
     if (studioSel) studioSel.classList.add('hidden');
@@ -1868,6 +2403,17 @@ function selectStudioCard(cardId) {
       'Warm Up Kiln (250°F)',
       true
     );
+
+    if (!isFiring) {
+      previewScheduleOnGraph({
+        id: 'warmup',
+        name: 'Warm Up (250°F)',
+        steps: [
+          { type: 'ramp', targetTempF: 250, ratePerHour: 180, label: 'Candling to 250°F' },
+          { type: 'hold', tempF: 250, durationMinutes: 120, label: 'Moisture Soak' }
+        ]
+      });
+    }
 
   } else if (cardId === 'qcard-bisque') {
     if (studioSel) studioSel.classList.add('hidden');
@@ -1892,6 +2438,8 @@ function selectStudioCard(cardId) {
         'Ignite: Bisque Firing',
         true
       );
+
+      if (!isFiring) previewScheduleOnGraph(bisqueSched);
     } else {
       updateStudioSelectionDisplay('Bisque Firing', 'No bisque schedule found in library', 'Ignite Kiln', false);
       if (btnIgnite) btnIgnite.disabled = true;
@@ -1920,6 +2468,8 @@ function selectStudioCard(cardId) {
         'Ignite: Cone 6 Glaze',
         true
       );
+
+      if (!isFiring) previewScheduleOnGraph(glazeSched);
     } else {
       updateStudioSelectionDisplay('Mid-Fire Glaze', 'No glaze schedule found in library', 'Ignite Kiln', false);
       if (btnIgnite) btnIgnite.disabled = true;
@@ -1944,6 +2494,8 @@ function selectStudioCard(cardId) {
           `Ignite: ${sched.name}`,
           true
         );
+
+        if (!isFiring) previewScheduleOnGraph(sched);
       }
     } else {
       currentStudioSelection = null;
@@ -1992,6 +2544,9 @@ function bindControls() {
         if (sched && sched.steps) {
           stepSel.innerHTML = sched.steps.map((st, i) => `<option value="${i}">Start at Step ${i+1}: ${st.type.toUpperCase()}</option>`).join('');
           stepSel.style.display = 'inline-block';
+          if (!state.live?.kilnStatus || (state.live.kilnStatus.state !== 'FIRING' && state.live.kilnStatus.state !== 'HOLD')) {
+            previewScheduleOnGraph(sched);
+          }
         }
       } else if (stepSel) {
         stepSel.style.display = 'none';

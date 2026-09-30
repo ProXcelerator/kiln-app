@@ -297,43 +297,91 @@
       </div>
     </div>
 
-    <!-- Step progress bar -->
-    <div class="step-progress-container" id="step-progress-container" style="display:none">
-      <div class="step-progress-header">
-        <span class="step-progress-title">Schedule Progress</span>
-        <span class="step-progress-count" id="step-progress-count"></span>
-      </div>
-      <div class="step-track" id="step-track"></div>
-    </div>
-
-    <!-- Live chart -->
-    <div class="chart-card">
+    <!-- Master Firing & Step Progress Graph -->
+    <div class="chart-card master-graph-card" id="firing-overview-card">
       <div class="chart-header">
-        <h3 class="chart-title">Temperature Timeline</h3>
-        <div class="chart-legend">
-          <span class="legend-item kiln-color">● Kiln Temp</span>
-          <span class="legend-item ambient-color">- - Goal Temp</span>
+        <div class="chart-header-left">
+          <div class="chart-badge-tag">STEP TIMELINE</div>
+          <h3 class="chart-title" id="graph-main-title">Firing Journey & Step Progress</h3>
+          <span class="chart-subtitle" id="graph-main-subtitle">Interactive Step Milestones • Telemetry Tracking</span>
+        </div>
+
+        <div class="chart-controls">
+          <!-- View switcher -->
+          <div class="graph-view-toggle" id="graph-view-toggle">
+            <button type="button" class="view-btn active" data-view="all" id="btn-view-all">All Steps</button>
+            <button type="button" class="view-btn" data-view="step" id="btn-view-step">Active Step</button>
+            <button type="button" class="view-btn" data-view="live" id="btn-view-live">Live 5m</button>
+          </div>
+
+          <div class="chart-legend">
+            <span class="legend-item kiln-color"><span class="legend-dot ember"></span> Actual Temp</span>
+            <span class="legend-item ambient-color"><span class="legend-line planned"></span> Planned Program</span>
+            <span class="legend-item rate-color"><span class="legend-dot cool"></span> Ramp Rate</span>
+          </div>
         </div>
       </div>
-      <div class="chart-wrap">
-        <canvas id="temp-chart"></canvas>
-      </div>
-    </div>
 
-    <!-- Full firing overview chart -->
-    <div class="chart-card" id="firing-overview-card" style="margin-top:1rem;">
-      <div class="chart-header">
-        <h3 class="chart-title">Full Firing Overview</h3>
-        <div class="chart-legend">
-          <span class="legend-item kiln-color">● Actual Temp</span>
-          <span class="legend-item ambient-color">- - Planned Schedule</span>
-        </div>
-      </div>
-      <div class="chart-wrap" style="height:160px;">
+      <!-- Main Step Graph Canvas -->
+      <div class="chart-wrap hero-chart-wrap" id="hero-chart-wrap">
         <canvas id="firing-overview-chart"></canvas>
+        <canvas id="temp-chart" style="display:none;"></canvas>
       </div>
-      <div id="firing-overview-placeholder" style="text-align:center; color:var(--text-muted); font-size:0.8rem; padding:2rem 0; display:none;">
-        Start a firing to see the full schedule overview
+
+      <div id="firing-overview-placeholder" style="display:none;"></div>
+
+      <!-- Active Step Hero Banner -->
+      <div class="active-step-banner" id="active-step-banner" style="display:none;">
+        <div class="active-step-left">
+          <div class="active-step-pill-group">
+            <span class="active-step-pulse-ring"></span>
+            <span class="active-step-pill" id="active-step-pill">STEP 1 OF 4</span>
+            <span class="active-step-type-pill" id="active-step-type">RAMP</span>
+            <span class="active-step-status-chip" id="active-step-status">FIRING</span>
+          </div>
+          <div class="active-step-name" id="active-step-name">Candling & Slow Ramp</div>
+          <div class="active-step-details" id="active-step-details">Target: 250°F @ 120°F/hr</div>
+        </div>
+
+        <div class="active-step-progress-center">
+          <div class="active-step-pct-row">
+            <span class="active-step-pct-label">Step Progress</span>
+            <span class="active-step-pct-val" id="active-step-pct">0%</span>
+          </div>
+          <div class="active-step-bar-track">
+            <div class="active-step-bar-fill" id="active-step-bar-fill" style="width: 0%;"></div>
+          </div>
+          <div class="active-step-sub-row" id="active-step-subtext">0°F / 0°F</div>
+        </div>
+
+        <div class="active-step-meta-right">
+          <div class="active-meta-item">
+            <span class="meta-label">Step Elapsed</span>
+            <span class="meta-val" id="active-step-elapsed">0m 00s</span>
+          </div>
+          <div class="active-meta-item">
+            <span class="meta-label">Est. Remaining</span>
+            <span class="meta-val highlight" id="active-step-remaining">—</span>
+          </div>
+          <div class="active-meta-item">
+            <span class="meta-label">Total Program</span>
+            <span class="meta-val" id="active-total-progress">0%</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step-by-Step Sequence Rail -->
+      <div class="step-progress-container" id="step-progress-container">
+        <div class="step-progress-header">
+          <div class="step-progress-title-wrap">
+            <span class="step-progress-title">Program Steps</span>
+            <span class="step-progress-count" id="step-progress-count">Select a program to preview</span>
+          </div>
+          <div class="step-journey-hint">Click any step card to inspect & zoom</div>
+        </div>
+        <div class="step-track" id="step-track">
+          <!-- Step cards rendered here -->
+        </div>
       </div>
     </div>
 

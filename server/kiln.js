@@ -353,16 +353,59 @@ class Kiln extends EventEmitter {
       ? Math.floor((Date.now() - new Date(this.startTime).getTime()) / 1000)
       : 0;
 
+    const currentTemp = this.kilnTempReadings.length
+      ? this.kilnTempReadings[this.kilnTempReadings.length - 1]
+      : (this.stepStartTemp || 72);
+
+    let stepProgressPercent = 0;
+    let stepRemainingSeconds = null;
+    let stepDurationSeconds = null;
+    let stepElapsedSeconds = 0;
+
+    if (step && this.stepStartTime) {
+      stepElapsedSeconds = Math.max(0, Math.floor((Date.now() - this.stepStartTime) / 1000));
+      if (step.type === 'ramp') {
+        const fromTemp = this.stepStartTemp != null ? this.stepStartTemp : 72;
+        const toTemp = step.targetTempF != null ? step.targetTempF : fromTemp;
+        const deltaTemp = Math.abs(toTemp - fromTemp);
+        const ratePerHour = step.ratePerHour || 100;
+        stepDurationSeconds = Math.max(1, Math.round((deltaTemp / ratePerHour) * 3600));
+
+        if (deltaTemp > 0) {
+          const progressTemp = Math.abs(currentTemp - fromTemp);
+          stepProgressPercent = Math.min(100, Math.max(0, Math.round((progressTemp / deltaTemp) * 100)));
+        } else {
+          stepProgressPercent = 100;
+        }
+
+        const remainingTemp = Math.max(0, Math.abs(toTemp - currentTemp));
+        stepRemainingSeconds = Math.round((remainingTemp / ratePerHour) * 3600);
+      } else if (step.type === 'hold') {
+        const totalHoldSec = Math.max(1, (step.durationMinutes || 0) * 60);
+        stepDurationSeconds = totalHoldSec;
+        const actualHoldSec = Math.floor((this._trueHoldTimeMs || 0) / 1000);
+        stepProgressPercent = Math.min(100, Math.max(0, Math.round((actualHoldSec / totalHoldSec) * 100)));
+        stepRemainingSeconds = Math.max(0, totalHoldSec - actualHoldSec);
+      }
+    }
+
     return {
       state: this.state,
       scheduleName: this.schedule ? this.schedule.name : null,
       scheduleId: this.schedule ? this.schedule.id : null,
+      scheduleSteps: this.schedule ? this.schedule.steps : [],
       stepIndex: this.stepIndex,
       currentStep: step || null,
       totalSteps: this.schedule ? this.schedule.steps.length : 0,
       startTime: this.startTime,
       endTime: this.endTime,
       elapsedSeconds: elapsed,
+      stepStartTime: this.stepStartTime,
+      stepStartTemp: this.stepStartTemp,
+      stepElapsedSeconds,
+      stepDurationSeconds,
+      stepProgressPercent,
+      stepRemainingSeconds,
       relayOn: this.relayOn,
       dutyCycle: this.dutyCycle || 0,
       idealSetpoint: this.currentSetpoint != null ? Math.round(this.currentSetpoint * 10) / 10 : null,
