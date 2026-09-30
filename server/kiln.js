@@ -38,6 +38,7 @@ class Kiln extends EventEmitter {
     // Relay state (physical GPIO on Pi)
     this.relayOn = false;
     this._relay = null; // cached Gpio instance
+    this._relayOnSince = null; // timestamp when current continuous relay-ON pulse started
 
     // Feed-Forward tracking: how many total relay-ON seconds have been "injected" recently
     this._recentRelayOnMs = 0;  // milliseconds of ON time accumulated this duty window
@@ -94,6 +95,7 @@ class Kiln extends EventEmitter {
   stop() {
     this._clearTicker();
     this.relayOn = false;
+    this._relayOnSince = null;
     this._setRelay(false);
 
     // If we were actively firing, save the record before clearing state
@@ -114,6 +116,7 @@ class Kiln extends EventEmitter {
 
   complete(finalTemp) {
     this._clearTicker();
+    this._relayOnSince = null;
     this._setRelay(false);
     this.state = 'COMPLETE';
     this.endTime = new Date().toISOString();
@@ -389,6 +392,25 @@ class Kiln extends EventEmitter {
       }
     }
 
+    const relayContinuousOnSeconds = (this.relayOn && this._relayOnSince)
+      ? Math.floor((Date.now() - this._relayOnSince) / 1000)
+      : 0;
+
+    let struggleLevel = 'normal'; // 'normal' | 'caution' | 'struggling' | 'severe'
+    let isStruggling = false;
+    if (this.state === 'FIRING' || this.state === 'HOLD') {
+      if (relayContinuousOnSeconds >= 480) {
+        struggleLevel = 'severe'; // 8+ mins continuous full burn
+        isStruggling = true;
+      } else if (relayContinuousOnSeconds >= 240 || (relayContinuousOnSeconds >= 120 && this._isLagging)) {
+        struggleLevel = 'struggling'; // 4+ mins continuous full burn or 2m+ lagging behind setpoint
+        isStruggling = true;
+      } else if (relayContinuousOnSeconds >= 90) {
+        struggleLevel = 'caution'; // 1.5+ mins continuous burn
+        isStruggling = false;
+      }
+    }
+
     return {
       state: this.state,
       scheduleName: this.schedule ? this.schedule.name : null,
@@ -407,6 +429,11 @@ class Kiln extends EventEmitter {
       stepProgressPercent,
       stepRemainingSeconds,
       relayOn: this.relayOn,
+      relayOnSince: this._relayOnSince,
+      relayContinuousOnSeconds,
+      isStruggling,
+      struggleLevel,
+      isLagging: this._isLagging || false,
       dutyCycle: this.dutyCycle || 0,
       idealSetpoint: this.currentSetpoint != null ? Math.round(this.currentSetpoint * 10) / 10 : null,
       isWaitingForCoolDown: this._isWaitingForCoolDown || false,
@@ -551,7 +578,17 @@ class Kiln extends EventEmitter {
   }
 
   _setRelay(on) {
-    this.relayOn = on;
+    const wasOn = this.relayOn;
+    this.relayOn = !!on;
+
+    if (this.relayOn) {
+      if (!wasOn || !this._relayOnSince) {
+        this._relayOnSince = Date.now();
+      }
+    } else {
+      this._relayOnSince = null;
+    }
+
     // === GPIO HOOK (Raspberry Pi only) ===
     try {
       const { execSync } = require('child_process');
@@ -559,7 +596,8 @@ class Kiln extends EventEmitter {
     } catch (err) {
       console.warn('[Relay Warning] Could not trigger hardware GPIO via pinctrl:', err.message);
     }
-    console.log(`[Relay] ${on ? 'ON' : 'OFF'}`);
+    const contStr = (this.relayOn && this._relayOnSince) ? ` (Continuous: ${Math.floor((Date.now() - this._relayOnSince)/1000)}s)` : '';
+    console.log(`[Relay] ${on ? 'ON' : 'OFF'}${contStr}`);
   }
 
   _projectEndTime() {

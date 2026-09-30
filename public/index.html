@@ -95,12 +95,32 @@
           <text class="gauge-label" x="120" y="168" text-anchor="middle">KILN TEMP</text>
           <!-- Min/Max labels -->
           <text class="gauge-minmax" x="28" y="185" text-anchor="middle">0°</text>
-          <text class="gauge-minmax" x="212" y="185" text-anchor="middle">2500°</text>
+          <text class="gauge-minmax" id="gauge-max-text" x="212" y="185" text-anchor="middle">2500°</text>
         </svg>
 
         <div class="kiln-state-badge" id="kiln-state-badge">
           <span class="state-dot"></span>
           <span id="kiln-state-label">IDLE</span>
+        </div>
+
+        <!-- Real-Time Heating & Struggle Status for Phone / Remote Monitoring -->
+        <div class="heating-status-bar" id="heating-status-bar">
+          <div class="heating-pill standby" id="heating-pill">
+            <span class="heating-icon" id="heating-icon">⚪</span>
+            <span class="heating-text" id="heating-text">STANDBY (COILS OFF)</span>
+            <span class="heating-power" id="heating-power">0W</span>
+          </div>
+          <div class="heating-sub-info" id="heating-sub-info">
+            <span class="heating-duration" id="heating-duration">Kiln Idle</span>
+            <span class="heating-duty" id="heating-duty">Duty: 0%</span>
+          </div>
+          <div class="struggle-alert-banner hidden" id="struggle-alert-banner">
+            <span class="struggle-icon" id="struggle-icon">⚠️</span>
+            <div class="struggle-msg">
+              <span class="struggle-title" id="struggle-title">High Demand</span>
+              <span class="struggle-desc" id="struggle-desc">Continuous element power</span>
+            </div>
+          </div>
         </div>
       </div>
 

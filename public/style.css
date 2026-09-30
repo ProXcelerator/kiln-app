@@ -391,6 +391,181 @@ input, select, textarea { font-family: inherit; }
   border-color: rgba(244, 67, 54, 0.4);
 }
 
+/* ===== REAL-TIME HEATING & STRUGGLE STATUS (PHONE / REMOTE) ===== */
+.hero-gauge-wrap.relay-energized .temp-gauge {
+  filter: drop-shadow(0 4px 28px rgba(255, 69, 0, 0.55));
+  animation: heat-radiance 2s ease-in-out infinite alternate;
+}
+
+.hero-gauge-wrap.relay-energized .gauge-fill {
+  filter: drop-shadow(0 0 10px rgba(255, 69, 0, 0.85));
+}
+
+.hero-gauge-wrap.relay-energized .gauge-temp {
+  text-shadow: 0 0 14px rgba(255, 107, 53, 0.7);
+}
+
+.hero-gauge-wrap.relay-coasting .temp-gauge {
+  filter: drop-shadow(0 4px 18px rgba(99, 102, 241, 0.22));
+}
+
+@keyframes heat-radiance {
+  0% { filter: drop-shadow(0 4px 20px rgba(255, 69, 0, 0.4)); }
+  100% { filter: drop-shadow(0 4px 34px rgba(255, 107, 53, 0.75)); }
+}
+
+.heating-status-bar {
+  width: 100%;
+  max-width: 270px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  align-items: stretch;
+  margin-top: 0.35rem;
+}
+
+.heating-pill {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.45rem 0.85rem;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  transition: all 0.35s ease;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+  border: 1px solid transparent;
+}
+
+.heating-pill .heating-icon {
+  font-size: 0.95rem;
+  line-height: 1;
+  display: inline-block;
+}
+
+.heating-pill.active-heating {
+  background: linear-gradient(135deg, #e53e3e 0%, #dd6b20 50%, #f6ad55 100%);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.35);
+  box-shadow: 0 0 16px rgba(235, 87, 87, 0.55), inset 0 1px 1px rgba(255, 255, 255, 0.4);
+  animation: heating-glow-pulse 1.6s ease-in-out infinite alternate;
+}
+
+.heating-pill.active-heating .heating-icon {
+  animation: flame-wiggle 1s ease-in-out infinite alternate;
+}
+
+.heating-pill.resting {
+  background: rgba(30, 41, 59, 0.85);
+  color: #94a3b8;
+  border-color: rgba(148, 163, 184, 0.2);
+}
+
+.heating-pill.standby {
+  background: rgba(15, 23, 42, 0.6);
+  color: #64748b;
+  border-color: rgba(100, 116, 139, 0.15);
+}
+
+.heating-pill .heating-power {
+  padding: 0.15rem 0.5rem;
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  background: rgba(0, 0, 0, 0.28);
+}
+
+.heating-sub-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 0 0.4rem;
+}
+
+.heating-sub-info .heating-duration.urgent {
+  color: #f87171;
+  font-weight: 700;
+}
+
+.struggle-alert-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.7rem;
+  line-height: 1.25;
+  transition: all 0.3s ease;
+}
+
+.struggle-alert-banner.hidden {
+  display: none !important;
+}
+
+.struggle-alert-banner.caution {
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.5);
+  color: #fbbf24;
+}
+
+.struggle-alert-banner.struggling {
+  background: rgba(239, 68, 68, 0.2);
+  border: 1.5px solid rgba(239, 68, 68, 0.75);
+  color: #fca5a5;
+  box-shadow: 0 0 14px rgba(239, 68, 68, 0.4);
+  animation: struggle-pulse 1.2s ease infinite;
+}
+
+.struggle-alert-banner.severe {
+  background: rgba(220, 38, 38, 0.32);
+  border: 1.5px solid #ef4444;
+  color: #fee2e2;
+  box-shadow: 0 0 22px rgba(239, 68, 68, 0.65);
+  animation: struggle-flash 0.8s ease infinite;
+}
+
+.struggle-msg {
+  display: flex;
+  flex-direction: column;
+}
+
+.struggle-title {
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.struggle-desc {
+  font-size: 0.67rem;
+  opacity: 0.92;
+}
+
+@keyframes heating-glow-pulse {
+  0% { box-shadow: 0 0 10px rgba(235, 87, 87, 0.45); }
+  100% { box-shadow: 0 0 24px rgba(255, 107, 53, 0.9), inset 0 0 8px rgba(255,255,255,0.3); }
+}
+
+@keyframes flame-wiggle {
+  0% { transform: scale(1) rotate(-4deg); }
+  100% { transform: scale(1.22) rotate(4deg); }
+}
+
+@keyframes struggle-pulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 8px rgba(239, 68, 68, 0.3); }
+  50% { transform: scale(1.02); box-shadow: 0 0 18px rgba(239, 68, 68, 0.65); }
+}
+
+@keyframes struggle-flash {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.72; }
+}
+
 /* ===== HERO INFO ===== */
 .hero-info {
   display: flex;

@@ -35,6 +35,8 @@ let state = {
   chartData: { labels: [], kilnTemps: [], ambientTemps: [] },
   chart: null,
   elapsedTimer: null,
+  relayTicker: null,
+  relayOnSince: null,
   // Full Firing Overview & Step Journey
   firingChart: null,
   firingStartTime: null,
@@ -135,8 +137,10 @@ function setBadge(status) {
 // ============================================================
 function onTelemetry(data) {
   state.live = data;
-  updateGauge(data.kilnTempF);
+  const maxTempF = getActiveScheduleMaxTemp(data.kilnStatus);
+  updateGauge(data.kilnTempF, maxTempF);
   updateKilnStatus(data.kilnStatus);
+  updateHeatingIndicator(data.kilnStatus, data);
   updateStats(data);
   pushChartData(data.kilnTempF, data.kilnStatus);
   updateSensorInfo(data);
@@ -259,32 +263,237 @@ function polarToCart(cx, cy, r, angleDeg) {
   return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
 }
 
-function updateGauge(tempF) {
+function getActiveScheduleMaxTemp(status) {
+  // 1. Look for active firing steps in kilnStatus
+  let steps = status?.scheduleSteps;
+  if (!steps || !steps.length) {
+    if (status?.scheduleId && state.schedules) {
+      const found = state.schedules.find(s => s.id === status.scheduleId);
+      if (found && found.steps) steps = found.steps;
+    }
+  }
+  // 2. If IDLE, check currently selected/primed schedule in Studio Mode
+  if (!steps || !steps.length) {
+    if (typeof currentStudioSelection !== 'undefined' && currentStudioSelection) {
+      if (currentStudioSelection.type === 'warmup') {
+        return 250;
+      }
+      if (currentStudioSelection.scheduleId && state.schedules) {
+        const found = state.schedules.find(s => s.id === currentStudioSelection.scheduleId);
+        if (found && found.steps) steps = found.steps;
+      }
+    }
+  }
+  // 3. If IDLE, check classic start-schedule-select
+  if (!steps || !steps.length) {
+    const sel = document.getElementById('start-schedule-select');
+    if (sel && sel.value && state.schedules) {
+      const found = state.schedules.find(s => s.id === sel.value);
+      if (found && found.steps) steps = found.steps;
+    }
+  }
+  // 4. Fallback to first schedule in state if available
+  if ((!steps || !steps.length) && state.schedules && state.schedules.length > 0) {
+    steps = state.schedules[0].steps;
+  }
+
+  if (steps && steps.length > 0) {
+    let peak = 0;
+    for (const st of steps) {
+      const t = st.targetTempF || st.tempF || 0;
+      if (t > peak) peak = t;
+    }
+    if (peak > 100) return peak;
+  }
+
+  return 2500;
+}
+
+function updateGauge(tempF, maxTempF) {
   const el = document.getElementById('gauge-temp-text');
   const arc = document.getElementById('gauge-arc');
+  const maxEl = document.getElementById('gauge-max-text');
   if (!el || !arc) return;
+
+  const maxTemp = (maxTempF && maxTempF > 0) ? Math.max(100, Math.round(maxTempF)) : GAUGE_MAX_TEMP;
+  if (maxEl) maxEl.textContent = `${maxTemp}°`;
 
   el.textContent = tempF != null ? `${Math.round(tempF)}°F` : '—';
 
-  const fraction = Math.min(1, Math.max(0, (tempF || 0) / GAUGE_MAX_TEMP));
+  const fraction = Math.min(1, Math.max(0, (tempF || 0) / maxTemp));
+  const isCalciforge = !!document.querySelector('.hearth-center');
+  const cx = GAUGE_CX;
+  const cy = isCalciforge ? 200 : GAUGE_CY;
+  const r = isCalciforge ? 100 : GAUGE_R;
+
   const startDeg = GAUGE_START_ANGLE;
   const endDeg = GAUGE_START_ANGLE + fraction * GAUGE_SWEEP;
 
-  const start = polarToCart(GAUGE_CX, GAUGE_CY, GAUGE_R, startDeg);
-  const end = polarToCart(GAUGE_CX, GAUGE_CY, GAUGE_R, endDeg);
+  const start = polarToCart(cx, cy, r, startDeg);
+  const end = polarToCart(cx, cy, r, endDeg);
   const largeArc = (fraction * GAUGE_SWEEP) > 180 ? 1 : 0;
 
   if (fraction < 0.001) {
-    arc.setAttribute('d', `M ${start.x} ${start.y} A ${GAUGE_R} ${GAUGE_R} 0 0 1 ${start.x} ${start.y}`);
+    arc.setAttribute('d', `M ${start.x} ${start.y} A ${r} ${r} 0 0 1 ${start.x} ${start.y}`);
   } else {
-    arc.setAttribute('d', `M ${start.x} ${start.y} A ${GAUGE_R} ${GAUGE_R} 0 ${largeArc} 1 ${end.x} ${end.y}`);
+    arc.setAttribute('d', `M ${start.x} ${start.y} A ${r} ${r} 0 ${largeArc} 1 ${end.x} ${end.y}`);
   }
 
   // Also update track path
   const trackEl = document.querySelector('.gauge-track');
   if (trackEl) {
-    const trackEnd = polarToCart(GAUGE_CX, GAUGE_CY, GAUGE_R, GAUGE_START_ANGLE + GAUGE_SWEEP);
-    trackEl.setAttribute('d', `M ${start.x} ${start.y} A ${GAUGE_R} ${GAUGE_R} 0 1 1 ${trackEnd.x} ${trackEnd.y}`);
+    const trackEnd = polarToCart(cx, cy, r, GAUGE_START_ANGLE + GAUGE_SWEEP);
+    trackEl.setAttribute('d', `M ${start.x} ${start.y} A ${r} ${r} 0 1 1 ${trackEnd.x} ${trackEnd.y}`);
+  }
+}
+
+function updateHeatingIndicator(status, liveData) {
+  if (!status) return;
+
+  const gaugeWrap = document.getElementById('hero-gauge-wrap') || document.querySelector('.hero-gauge-wrap') || document.querySelector('.hearth-center');
+  const pill = document.getElementById('heating-pill');
+  const icon = document.getElementById('heating-icon');
+  const text = document.getElementById('heating-text');
+  const power = document.getElementById('heating-power');
+  const duration = document.getElementById('heating-duration');
+  const duty = document.getElementById('heating-duty');
+  const banner = document.getElementById('struggle-alert-banner');
+  const struggleIcon = document.getElementById('struggle-icon');
+  const struggleTitle = document.getElementById('struggle-title');
+  const struggleDesc = document.getElementById('struggle-desc');
+
+  if (!pill) return;
+
+  const isFiring = status.state === 'FIRING' || status.state === 'HOLD';
+  const isRelayOn = !!status.relayOn;
+
+  // 1. Maintain local continuous ON timestamp for smooth 1-second ticking
+  if (isRelayOn) {
+    if (!state.relayOnSince) {
+      if (status.relayOnSince) {
+        state.relayOnSince = new Date(status.relayOnSince).getTime();
+      } else if (status.relayContinuousOnSeconds) {
+        state.relayOnSince = Date.now() - (status.relayContinuousOnSeconds * 1000);
+      } else {
+        state.relayOnSince = Date.now();
+      }
+    }
+  } else {
+    state.relayOnSince = null;
+  }
+
+  // 2. Active hero glow
+  if (gaugeWrap) {
+    if (isRelayOn) {
+      gaugeWrap.classList.add('relay-energized');
+      gaugeWrap.classList.remove('relay-coasting');
+    } else if (isFiring) {
+      gaugeWrap.classList.remove('relay-energized');
+      gaugeWrap.classList.add('relay-coasting');
+    } else {
+      gaugeWrap.classList.remove('relay-energized', 'relay-coasting');
+    }
+  }
+
+  // 3. Pill state & text
+  const currentWatts = liveData?.watts != null
+    ? Math.round(liveData.watts)
+    : (isRelayOn ? (status.schedule?.kilnWatts || 5520) : 0);
+
+  if (isFiring) {
+    if (isRelayOn) {
+      pill.className = 'heating-pill active-heating';
+      if (icon) icon.textContent = '🔥';
+      if (text) text.textContent = 'ACTIVELY HEATING • COILS ON';
+      if (power) power.textContent = `${currentWatts > 0 ? currentWatts.toLocaleString() : '5,520'}W`;
+    } else {
+      pill.className = 'heating-pill resting';
+      if (icon) icon.textContent = '💤';
+      if (text) text.textContent = 'COASTING • COILS OFF';
+      if (power) power.textContent = '0W';
+    }
+  } else if (status.state === 'COMPLETE') {
+    pill.className = 'heating-pill resting';
+    if (icon) icon.textContent = '✅';
+    if (text) text.textContent = 'COMPLETE • COOLING';
+    if (power) power.textContent = '0W';
+  } else {
+    // IDLE
+    pill.className = 'heating-pill standby';
+    if (icon) icon.textContent = '⚪';
+    if (text) text.textContent = 'STANDBY (COILS OFF)';
+    if (power) power.textContent = '0W';
+  }
+
+  // 4. Continuous ON duration & duty cycle
+  const continuousSec = (isRelayOn && state.relayOnSince)
+    ? Math.max(0, Math.floor((Date.now() - state.relayOnSince) / 1000))
+    : (status.relayContinuousOnSeconds || 0);
+
+  if (duration) {
+    if (isRelayOn) {
+      duration.textContent = `Continuous Heat: ${formatDuration(continuousSec)}`;
+      duration.classList.toggle('urgent', continuousSec >= 180);
+    } else if (isFiring) {
+      duration.textContent = 'Resting / Cycling Off';
+      duration.classList.remove('urgent');
+    } else {
+      duration.textContent = 'Kiln is Idle';
+      duration.classList.remove('urgent');
+    }
+  }
+
+  if (duty) {
+    duty.textContent = `Duty: ${Math.round(status.dutyCycle || 0)}%`;
+  }
+
+  // 5. Struggle Alert Banner
+  if (banner) {
+    let struggleLevel = status.struggleLevel || 'normal';
+    if (isFiring && isRelayOn) {
+      if (continuousSec >= 480) struggleLevel = 'severe';
+      else if (continuousSec >= 240 || (continuousSec >= 120 && status.isLagging)) struggleLevel = 'struggling';
+      else if (continuousSec >= 90) struggleLevel = 'caution';
+    }
+
+    if (isFiring && struggleLevel !== 'normal') {
+      banner.className = `struggle-alert-banner ${struggleLevel}`;
+      if (struggleLevel === 'caution') {
+        if (struggleIcon) struggleIcon.textContent = '⚡';
+        if (struggleTitle) struggleTitle.textContent = 'High Demand (Coils Continuous)';
+        if (struggleDesc) struggleDesc.textContent = `Elements continuous for ${formatDuration(continuousSec)} • Heavy climb power`;
+      } else if (struggleLevel === 'severe') {
+        if (struggleIcon) struggleIcon.textContent = '🚨';
+        if (struggleTitle) struggleTitle.textContent = 'Critical Prolonged Full Burn (8m+)';
+        if (struggleDesc) struggleDesc.textContent = `Elements continuous for ${formatDuration(continuousSec)}. Kiln is running at max capacity without cycling off.`;
+      } else {
+        // 'struggling'
+        if (struggleIcon) struggleIcon.textContent = '⚠️';
+        if (struggleTitle) struggleTitle.textContent = 'Kiln Struggling to Reach Target';
+        if (struggleDesc) struggleDesc.textContent = `Elements continuous for ${formatDuration(continuousSec)} • Output pinned at 100%`;
+      }
+    } else {
+      banner.className = 'struggle-alert-banner hidden';
+    }
+  }
+
+  // 6. Smooth 1-second ticker while relay is ON
+  if (isRelayOn) {
+    if (!state.relayTicker) {
+      state.relayTicker = setInterval(() => {
+        if (state.live && state.live.kilnStatus && state.live.kilnStatus.relayOn) {
+          updateHeatingIndicator(state.live.kilnStatus, state.live);
+        } else {
+          clearInterval(state.relayTicker);
+          state.relayTicker = null;
+        }
+      }, 1000);
+    }
+  } else {
+    if (state.relayTicker) {
+      clearInterval(state.relayTicker);
+      state.relayTicker = null;
+    }
   }
 }
 
@@ -293,6 +502,10 @@ function updateGauge(tempF) {
 // ============================================================
 function updateKilnStatus(status) {
   if (!status) return;
+
+  const maxTempF = getActiveScheduleMaxTemp(status);
+  updateGauge(state.live?.kilnTempF, maxTempF);
+  updateHeatingIndicator(status, state.live);
 
   const hero = document.getElementById('kiln-hero');
   const badge = document.getElementById('kiln-state-badge');
@@ -1163,6 +1376,12 @@ function previewScheduleOnGraph(schedule) {
   if (subTitle) {
     subTitle.textContent = `Schedule Preview: ${schedule.name} • ${schedule.steps.length} Steps • ${calcScheduleDuration(schedule)}`;
   }
+  let max = 0;
+  for (const st of schedule.steps) {
+    const t = st.targetTempF || st.tempF || 0;
+    if (t > max) max = t;
+  }
+  updateGauge(tempF, max > 100 ? max : 2500);
 }
 
 function renderStepJourney(schedule, activeStepIndex, kilnStatus, kilnTempF) {
