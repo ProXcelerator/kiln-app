@@ -15,6 +15,8 @@ const API = {
   kilnStart:   '/api/kiln/start',
   kilnWarmup:  '/api/kiln/warmup',
   kilnStop:    '/api/kiln/stop',
+  kilnLockOn:  '/api/kiln/lock-on',
+  kilnUnlock:  '/api/kiln/unlock',
   settings:    '/api/settings'
 };
 
@@ -366,6 +368,7 @@ function updateHeatingIndicator(status, liveData) {
 
   const isFiring = status.state === 'FIRING' || status.state === 'HOLD';
   const isRelayOn = !!status.relayOn;
+  const isLocked = !!status.manualLockedOn;
 
   // 1. Maintain local continuous ON timestamp for smooth 1-second ticking
   if (isRelayOn) {
@@ -400,7 +403,12 @@ function updateHeatingIndicator(status, liveData) {
     ? Math.round(liveData.watts)
     : (isRelayOn ? (status.schedule?.kilnWatts || 5520) : 0);
 
-  if (isFiring) {
+  if (isLocked) {
+    pill.className = 'heating-pill active-heating locked-on';
+    if (icon) icon.textContent = '🔥';
+    if (text) text.textContent = 'COILS LOCKED ON • 100% POWER';
+    if (power) power.textContent = `${currentWatts > 0 ? currentWatts.toLocaleString() : '5,520'}W`;
+  } else if (isFiring) {
     if (isRelayOn) {
       pill.className = 'heating-pill active-heating';
       if (icon) icon.textContent = '🔥';
@@ -431,7 +439,10 @@ function updateHeatingIndicator(status, liveData) {
     : (status.relayContinuousOnSeconds || 0);
 
   if (duration) {
-    if (isRelayOn) {
+    if (isLocked) {
+      duration.textContent = `🔒 Locked ON: ${formatDuration(continuousSec)}`;
+      duration.classList.add('urgent');
+    } else if (isRelayOn) {
       duration.textContent = `Continuous Heat: ${formatDuration(continuousSec)}`;
       duration.classList.toggle('urgent', continuousSec >= 180);
     } else if (isFiring) {
@@ -444,19 +455,26 @@ function updateHeatingIndicator(status, liveData) {
   }
 
   if (duty) {
-    duty.textContent = `Duty: ${Math.round(status.dutyCycle || 0)}%`;
+    duty.textContent = isLocked ? 'Duty: 100% (Locked)' : `Duty: ${Math.round(status.dutyCycle || 0)}%`;
   }
 
   // 5. Struggle Alert Banner
   if (banner) {
     let struggleLevel = status.struggleLevel || 'normal';
-    if (isFiring && isRelayOn) {
+    if (isLocked) {
+      struggleLevel = 'severe';
+    } else if (isFiring && isRelayOn) {
       if (continuousSec >= 480) struggleLevel = 'severe';
       else if (continuousSec >= 240 || (continuousSec >= 120 && status.isLagging)) struggleLevel = 'struggling';
       else if (continuousSec >= 90) struggleLevel = 'caution';
     }
 
-    if (isFiring && struggleLevel !== 'normal') {
+    if (isLocked) {
+      banner.className = 'struggle-alert-banner severe';
+      if (struggleIcon) struggleIcon.textContent = '🔒';
+      if (struggleTitle) struggleTitle.textContent = 'Manual Full-Power Lock Active';
+      if (struggleDesc) struggleDesc.textContent = `Coils are forced ON at 100% duty cycle (${formatDuration(continuousSec)}). Kiln will heat continuously until unlocked or safety ceiling reached.`;
+    } else if (isFiring && struggleLevel !== 'normal') {
       banner.className = `struggle-alert-banner ${struggleLevel}`;
       if (struggleLevel === 'caution') {
         if (struggleIcon) struggleIcon.textContent = '⚡';
@@ -476,6 +494,29 @@ function updateHeatingIndicator(status, liveData) {
       banner.className = 'struggle-alert-banner hidden';
     }
   }
+
+  // 6. Update Lock ON Buttons State
+  const lockButtons = [
+    document.getElementById('btn-hero-lock-on'),
+    document.getElementById('btn-lock-on'),
+    document.getElementById('btn-studio-lock-on')
+  ];
+
+  lockButtons.forEach(btn => {
+    if (!btn) return;
+    btn.classList.toggle('locked-active', isLocked);
+    if (isLocked) {
+      btn.innerHTML = '🔓 Unlock Kiln';
+      btn.title = 'Click to release full-power lock and return to automatic control';
+    } else {
+      if (btn.id === 'btn-studio-lock-on') {
+        btn.innerHTML = '🔒 Lock ON';
+      } else {
+        btn.innerHTML = '🔒 Lock Kiln ON';
+      }
+      btn.title = 'Click to force heating coils continuously ON (100% duty)';
+    }
+  });
 
   // 6. Smooth 1-second ticker while relay is ON
   if (isRelayOn) {
@@ -2012,6 +2053,71 @@ async function stopFiring() {
 }
 
 // ============================================================
+// MANUAL LOCK-ON / UNLOCK
+// ============================================================
+function openLockConfirmModal() {
+  const modal = document.getElementById('lock-confirm-modal');
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeLockConfirmModal() {
+  const modal = document.getElementById('lock-confirm-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+window.openLockConfirmModal = openLockConfirmModal;
+window.closeLockConfirmModal = closeLockConfirmModal;
+
+async function lockKilnOn() {
+  closeLockConfirmModal();
+  try {
+    const res = await fetch(API.kilnLockOn, { method: 'POST' });
+    const data = await res.json();
+    if (res.ok) {
+      toast('🔒 Kiln elements LOCKED ON (100% full power)', 'warning');
+      if (state.live && state.live.kilnStatus) {
+        state.live.kilnStatus.manualLockedOn = true;
+        state.live.kilnStatus.relayOn = true;
+        updateHeatingIndicator(state.live.kilnStatus, state.live);
+      }
+    } else {
+      toast(`Failed to lock kiln: ${data.error || 'Server error'}`, 'error');
+    }
+  } catch (e) {
+    console.error('Lock kiln error:', e);
+    toast('Error locking kiln ON', 'error');
+  }
+}
+
+async function unlockKiln() {
+  try {
+    const res = await fetch(API.kilnUnlock, { method: 'POST' });
+    const data = await res.json();
+    if (res.ok) {
+      toast('🔓 Kiln lock released. Normal control resumed.', 'success');
+      if (state.live && state.live.kilnStatus) {
+        state.live.kilnStatus.manualLockedOn = false;
+        updateHeatingIndicator(state.live.kilnStatus, state.live);
+      }
+    } else {
+      toast(`Failed to unlock kiln: ${data.error || 'Server error'}`, 'error');
+    }
+  } catch (e) {
+    console.error('Unlock kiln error:', e);
+    toast('Error unlocking kiln', 'error');
+  }
+}
+
+function toggleKilnLock() {
+  const isLocked = !!(state.live?.kilnStatus?.manualLockedOn);
+  if (isLocked) {
+    unlockKiln();
+  } else {
+    openLockConfirmModal();
+  }
+}
+
+// ============================================================
 // RECORDS
 // ============================================================
 async function loadRecords() {
@@ -2594,6 +2700,12 @@ function bindStudioControls() {
   if (btnStop) {
     btnStop.addEventListener('click', stopFiring);
   }
+
+  // Studio Lock ON Button
+  const btnStudioLock = document.getElementById('btn-studio-lock-on');
+  if (btnStudioLock) {
+    btnStudioLock.addEventListener('click', toggleKilnLock);
+  }
 }
 
 function selectStudioCard(cardId) {
@@ -2783,6 +2895,16 @@ function bindControls() {
 
   const btnStop = document.getElementById('btn-stop-fire');
   if (btnStop) btnStop.addEventListener('click', stopFiring);
+
+  // Manual Lock ON / Release Controls
+  const btnLock = document.getElementById('btn-lock-on');
+  if (btnLock) btnLock.addEventListener('click', toggleKilnLock);
+
+  const btnHeroLock = document.getElementById('btn-hero-lock-on');
+  if (btnHeroLock) btnHeroLock.addEventListener('click', toggleKilnLock);
+
+  const lockConfirmOk = document.getElementById('lock-confirm-ok');
+  if (lockConfirmOk) lockConfirmOk.addEventListener('click', lockKilnOn);
 
   // New schedule button
   const btnNew = document.getElementById('btn-new-schedule');

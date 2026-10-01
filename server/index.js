@@ -500,6 +500,34 @@ app.post('/api/kiln/stop', (req, res) => {
   res.json({ ...status, safetyStatus: safety.getStatus() });
 });
 
+app.post('/api/kiln/lock-on', (req, res) => {
+  try {
+    safety.reloadConfig();
+    safety.arm();
+    if (!currentFiringId) {
+      const { v4: uuidv4 } = require('uuid');
+      currentFiringId = uuidv4();
+      console.log('[DB] Manual Lock ON started, ID:', currentFiringId);
+    }
+    const status = kiln.lockOn();
+    res.json({ ...status, safetyStatus: safety.getStatus() });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/kiln/unlock', (req, res) => {
+  try {
+    const status = kiln.unlock();
+    if (status.state === 'IDLE' || status.state === 'COMPLETE') {
+      safety.disarm();
+    }
+    res.json({ ...status, safetyStatus: safety.getStatus() });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 // ============================================================
 // REST API — Safety status
 // ============================================================

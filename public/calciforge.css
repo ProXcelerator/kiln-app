@@ -467,6 +467,35 @@ button, select, input {
 .struggle-title { font-weight: 800; text-transform: uppercase; }
 .struggle-desc { font-size: 0.68rem; opacity: 0.9; }
 
+.btn-lock-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  width: 100%;
+  padding: 0.45rem 0.85rem;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  cursor: pointer;
+  background: rgba(255, 107, 53, 0.15);
+  color: #ffb347;
+  border: 1px solid rgba(255, 179, 71, 0.4);
+  transition: all 0.25s ease;
+}
+.btn-lock-toggle:hover {
+  background: rgba(255, 107, 53, 0.3);
+  color: #fff;
+  box-shadow: 0 0 15px rgba(255, 107, 53, 0.5);
+}
+.btn-lock-toggle.locked-active {
+  background: linear-gradient(135deg, #e53e3e, #c53030);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.5);
+  box-shadow: 0 0 20px rgba(229, 62, 62, 0.75);
+}
+
 .hero-meta-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

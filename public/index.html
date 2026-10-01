@@ -114,6 +114,10 @@
             <span class="heating-duration" id="heating-duration">Kiln Idle</span>
             <span class="heating-duty" id="heating-duty">Duty: 0%</span>
           </div>
+          <button class="btn-lock-toggle" id="btn-hero-lock-on" title="Force lock the kiln in the ON position (100% continuous power)">
+            <span class="btn-lock-icon">🔒</span>
+            <span class="btn-lock-label">Lock Kiln ON</span>
+          </button>
           <div class="struggle-alert-banner hidden" id="struggle-alert-banner">
             <span class="struggle-icon" id="struggle-icon">⚠️</span>
             <div class="struggle-msg">
@@ -167,6 +171,10 @@
           <button class="btn btn-warmup" id="btn-warmup-fire" title="Immediately warm up the kiln to 250°F and hold">
             <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12.395 2.553a1 1 0 00-1.45-.385c-.345.23-.614.558-.822.88-.316.492-.533 1.035-.688 1.587a12.87 12.87 0 00-.45 2.502c-.08.79-.115 1.58-.104 2.37.008.57.06 1.137.155 1.7a3.003 3.003 0 01-2.148-1.748 6.544 6.544 0 01-.422-2.19 1 1 0 00-1.74-.694c-1.01 1.257-1.664 2.825-1.664 4.544 0 3.866 3.134 7 7 7s7-3.134 7-7c0-2.884-1.704-5.405-4.11-6.566z" clip-rule="evenodd"/></svg>
             Warm Up to 250°F
+          </button>
+          <button class="btn btn-lock-on" id="btn-lock-on" title="Force lock the kiln relay in the ON position (100% continuous power)">
+            <span class="btn-lock-icon">🔒</span>
+            <span class="btn-lock-text">Lock Kiln ON</span>
           </button>
           <button class="btn btn-stop hidden" id="btn-stop-fire">
             <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z" clip-rule="evenodd"/></svg>
@@ -261,6 +269,11 @@
               <button class="btn btn-studio-ignite" id="btn-studio-ignite" disabled>
                 <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12.395 2.553a1 1 0 00-1.45-.385c-.345.23-.614.558-.822.88-.316.492-.533 1.035-.688 1.587a12.87 12.87 0 00-.45 2.502c-.08.79-.115 1.58-.104 2.37.008.57.06 1.137.155 1.7a3.003 3.003 0 01-2.148-1.748 6.544 6.544 0 01-.422-2.19 1 1 0 00-1.74-.694c-1.01 1.257-1.664 2.825-1.664 4.544 0 3.866 3.134 7 7 7s7-3.134 7-7c0-2.884-1.704-5.405-4.11-6.566z" clip-rule="evenodd"/></svg>
                 <span id="btn-studio-ignite-text">Ignite Kiln</span>
+              </button>
+
+              <button class="btn btn-lock-on" id="btn-studio-lock-on" title="Force lock the kiln relay in the ON position (100% continuous power)">
+                <span class="btn-lock-icon">🔒</span>
+                <span class="btn-lock-text">Lock Kiln ON</span>
               </button>
 
               <button class="btn btn-stop hidden" id="btn-studio-stop">
@@ -771,6 +784,33 @@ MISO → Pin 21 (BCM9  MISO)</pre>
     <div class="modal-footer" style="gap:0.75rem; border-top:1px solid rgba(255,80,60,0.15);">
       <button class="btn btn-ghost" id="stop-confirm-cancel" style="flex:1;">Cancel — Keep Firing</button>
       <button class="btn" id="stop-confirm-ok" style="flex:1; background:linear-gradient(135deg,#c0392b,#e74c3c); color:#fff; font-weight:700; letter-spacing:0.04em;">🛑 Yes, Stop Now</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== LOCK KILN ON CONFIRM MODAL ===== -->
+<div class="modal-overlay" id="lock-confirm-modal" style="display:none; z-index:9999;" onclick="if(event.target===this)closeLockConfirmModal()">
+  <div class="modal" role="alertdialog" aria-labelledby="lock-confirm-title" style="max-width:440px; width:100%; border:1px solid rgba(255,107,53,0.5); box-shadow: 0 0 45px rgba(255,107,53,0.25);">
+    <div class="modal-header" style="border-bottom:1px solid rgba(255,107,53,0.25);">
+      <h2 class="modal-title" id="lock-confirm-title" style="color:var(--ember, #ff6b35); display:flex; align-items:center; gap:0.5rem;">
+        <span>🔒</span> Lock Kiln ON?
+      </h2>
+      <button class="modal-close" onclick="closeLockConfirmModal()" aria-label="Close">✕</button>
+    </div>
+    <div class="modal-body" style="padding:1.5rem;">
+      <p style="color:var(--text-primary); font-size:0.95rem; margin:0 0 0.75rem; line-height:1.5;">
+        This will <strong>lock the heating elements continuously ON at 100% full power</strong> without thermostatic cycling.
+      </p>
+      <div style="background: rgba(255, 107, 53, 0.12); border: 1px solid rgba(255, 107, 53, 0.35); border-radius: var(--radius-sm, 8px); padding: 0.85rem; font-size: 0.82rem; color: #ffb347; margin-bottom: 0.75rem;">
+        ⚡ <strong>Coils will draw full power (~5,520W)</strong> until you manually click Unlock or Stop Firing.
+      </div>
+      <p style="color:var(--text-muted); font-size:0.78rem; margin:0;">
+        Max temperature ceiling protection (2,500°F) and safety watchdog remain fully armed.
+      </p>
+    </div>
+    <div class="modal-footer" style="gap:0.75rem; border-top:1px solid rgba(255,107,53,0.15);">
+      <button class="btn btn-ghost" onclick="closeLockConfirmModal()" style="flex:1;">Cancel</button>
+      <button class="btn" id="lock-confirm-ok" style="flex:1.3; background:linear-gradient(135deg,#e53e3e,#dd6b20); color:#fff; font-weight:700; letter-spacing:0.04em; border:1px solid rgba(255,255,255,0.3); box-shadow:0 0 15px rgba(255,107,53,0.5);">⚡ Yes, Lock Coils ON</button>
     </div>
   </div>
 </div>

@@ -107,6 +107,10 @@
               <span class="heating-duration" id="heating-duration">Kiln Idle</span>
               <span class="heating-duty" id="heating-duty">Duty: 0%</span>
             </div>
+            <button class="btn-lock-toggle" id="btn-hero-lock-on" title="Force lock the kiln in the ON position (100% continuous power)">
+              <span class="btn-lock-icon">🔒</span>
+              <span class="btn-lock-label">Lock Kiln ON</span>
+            </button>
             <div class="struggle-alert-banner hidden" id="struggle-alert-banner">
               <span class="struggle-icon" id="struggle-icon">⚠️</span>
               <div class="struggle-msg">
@@ -470,6 +474,23 @@
 
 <div class="modal-overlay" id="replay-modal" style="display:none;">
     <div class="modal"><button onclick="closeReplayModal()">X</button><div id="replay-status"></div><canvas id="replay-chart"></canvas><div id="replay-ramp-table"></div><div id="replay-adaptive-tuning"><input type="hidden" id="tuning-record-id"><select id="tuning-physical-result"></select><button id="btn-submit-tuning"></button><div id="tuning-result-msg"></div></div></div>
+</div>
+
+<div class="modal-overlay" id="lock-confirm-modal" style="display:none; z-index:9999;" onclick="if(event.target===this)closeLockConfirmModal()">
+  <div class="modal glass-panel" style="max-width:440px; border-color:var(--ember); box-shadow:0 0 40px rgba(255,107,53,0.3);">
+    <div class="modal-header"><h2 class="modal-title" style="color:var(--ember); display:flex; align-items:center; gap:0.5rem;"><span>🔒</span> Lock Calcifer ON?</h2></div>
+    <div class="modal-body" style="font-size:0.9rem; line-height:1.5;">
+      <p style="margin-bottom:0.75rem;">This will <strong>lock Calcifer at 100% full magic power</strong> continuously without cycling down.</p>
+      <div style="background:rgba(255,107,53,0.15); border:1px solid rgba(255,107,53,0.35); border-radius:8px; padding:0.8rem; font-size:0.8rem; color:#ffb347; margin-bottom:0.75rem;">
+        ⚡ <strong>Coils will draw full wattage (~5,520W)</strong> until you manually click Unlock or Halt Magic.
+      </div>
+      <p style="font-size:0.75rem; color:var(--text-muted); margin:0;">Safety ceilings (2,500°F) remain actively protected.</p>
+    </div>
+    <div class="modal-footer" style="display:flex; gap:0.75rem; justify-content:flex-end;">
+      <button class="btn btn-outline" onclick="closeLockConfirmModal()">Mercy</button>
+      <button class="btn btn-primary" id="lock-confirm-ok" style="background:linear-gradient(135deg,#e53e3e,#dd6b20);">⚡ Lock Coils ON</button>
+    </div>
+  </div>
 </div>
 
 <div class="modal-overlay" id="stop-confirm-modal" style="display:none;">

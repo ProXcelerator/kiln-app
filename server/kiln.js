@@ -39,6 +39,7 @@ class Kiln extends EventEmitter {
     this.relayOn = false;
     this._relay = null; // cached Gpio instance
     this._relayOnSince = null; // timestamp when current continuous relay-ON pulse started
+    this.manualLockedOn = false; // true when user forces relay locked in the ON position
 
     // Feed-Forward tracking: how many total relay-ON seconds have been "injected" recently
     this._recentRelayOnMs = 0;  // milliseconds of ON time accumulated this duty window
@@ -92,8 +93,48 @@ class Kiln extends EventEmitter {
     return this.getStatus();
   }
 
+  lockOn() {
+    this.manualLockedOn = true;
+    if (this.state === 'IDLE' || this.state === 'COMPLETE' || this.state === 'ERROR') {
+      this.state = 'FIRING';
+      this.startTime = new Date().toISOString();
+      this.endTime = null;
+      this.schedule = {
+        id: 'manual-lock',
+        name: 'Manual Override (Locked ON)',
+        kilnWatts: 5520,
+        steps: [
+          { id: 'lock-1', type: 'ramp', label: 'Manual Lock ON (100% Power)', targetTempF: 2400, ratePerHour: 9999 }
+        ]
+      };
+      this.stepIndex = 0;
+      this.stepStartTime = Date.now();
+      this.stepStartTemp = this.kilnTempReadings.length ? this.kilnTempReadings[this.kilnTempReadings.length - 1] : 72;
+      this.kilnTempReadings = [];
+      this.totalWattSeconds = 0;
+      this.lastWattsUpdateAt = Date.now();
+      this._lastTickAt = Date.now();
+    }
+    this.dutyCycle = 100.0;
+    this._setRelay(true);
+    console.log('[Kiln] 🔒 RELAY LOCKED ON (100% Continuous Output)');
+    this.emit('stateChange', this.getStatus());
+    return this.getStatus();
+  }
+
+  unlock() {
+    console.log('[Kiln] 🔓 RELAY UNLOCKED from manual ON');
+    this.manualLockedOn = false;
+    if (this.schedule && this.schedule.id === 'manual-lock') {
+      return this.stop();
+    }
+    this.emit('stateChange', this.getStatus());
+    return this.getStatus();
+  }
+
   stop() {
     this._clearTicker();
+    this.manualLockedOn = false;
     this.relayOn = false;
     this._relayOnSince = null;
     this._setRelay(false);
@@ -116,6 +157,7 @@ class Kiln extends EventEmitter {
 
   complete(finalTemp) {
     this._clearTicker();
+    this.manualLockedOn = false;
     this._relayOnSince = null;
     this._setRelay(false);
     this.state = 'COMPLETE';
@@ -294,24 +336,44 @@ class Kiln extends EventEmitter {
     // 3. Relay Control: Compare effectiveTempF (real or predicted coast) against setpoint
     const HYSTERESIS = 1.0;
 
-    if (effectiveTempF <= idealSetpoint - HYSTERESIS) {
+    if (this.manualLockedOn) {
+      this.dutyCycle = 100.0;
       if (!this.relayOn) {
         this._setRelay(true);
         this._lastRelayChangeAt = Date.now();
       } else {
-        // Track how long relay has been ON in this window
-        this._recentRelayOnMs += 2000; // approximately 2s per tick
+        this._recentRelayOnMs += 2000;
       }
-    } else if (effectiveTempF >= idealSetpoint) {
-      if (this.relayOn) {
-        this._setRelay(false);
-        this._lastRelayChangeAt = Date.now();
-        // Decay the accumulated on-time as the system cools
-        // We halve it every time we turn OFF so old heat stops counting over time
-        this._recentRelayOnMs = Math.max(0, this._recentRelayOnMs * 0.5);
-      } else {
-        // Relay already off, continue decaying the stored heat estimate
-        this._recentRelayOnMs = Math.max(0, this._recentRelayOnMs - 100);
+      // Safety ceiling failsafe: auto-stop if physical kiln hits 2450°F
+      if (kilnTempF >= 2450) {
+        console.warn('[Kiln] Manual Lock auto-stopped: 2450°F ceiling reached!');
+        this.stop();
+        return;
+      }
+      if (this.schedule && this.schedule.id === 'manual-lock') {
+        console.log(`[Manual Lock] Temp: ${Math.round(kilnTempF)}°F | Relay: LOCKED ON (100%) | Continuous: ${Math.floor((Date.now() - (this._relayOnSince || Date.now()))/1000)}s`);
+        return;
+      }
+    } else {
+      if (effectiveTempF <= idealSetpoint - HYSTERESIS) {
+        if (!this.relayOn) {
+          this._setRelay(true);
+          this._lastRelayChangeAt = Date.now();
+        } else {
+          // Track how long relay has been ON in this window
+          this._recentRelayOnMs += 2000; // approximately 2s per tick
+        }
+      } else if (effectiveTempF >= idealSetpoint) {
+        if (this.relayOn) {
+          this._setRelay(false);
+          this._lastRelayChangeAt = Date.now();
+          // Decay the accumulated on-time as the system cools
+          // We halve it every time we turn OFF so old heat stops counting over time
+          this._recentRelayOnMs = Math.max(0, this._recentRelayOnMs * 0.5);
+        } else {
+          // Relay already off, continue decaying the stored heat estimate
+          this._recentRelayOnMs = Math.max(0, this._recentRelayOnMs - 100);
+        }
       }
     }
 
@@ -431,6 +493,7 @@ class Kiln extends EventEmitter {
       relayOn: this.relayOn,
       relayOnSince: this._relayOnSince,
       relayContinuousOnSeconds,
+      manualLockedOn: !!this.manualLockedOn,
       isStruggling,
       struggleLevel,
       isLagging: this._isLagging || false,

@@ -566,6 +566,93 @@ input, select, textarea { font-family: inherit; }
   50% { opacity: 0.72; }
 }
 
+/* ===== LOCK KILN ON STYLING ===== */
+.btn-lock-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  width: 100%;
+  padding: 0.4rem 0.85rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  background: rgba(255, 107, 53, 0.09);
+  color: #ff9800;
+  border: 1px solid rgba(255, 152, 0, 0.45);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  transition: all 0.25s ease;
+}
+
+.btn-lock-toggle:hover {
+  background: rgba(255, 107, 53, 0.2);
+  border-color: #ff9800;
+  color: #fff;
+  box-shadow: 0 0 14px rgba(255, 152, 0, 0.35);
+}
+
+.btn-lock-toggle.locked-active {
+  background: linear-gradient(135deg, #e53e3e 0%, #c53030 100%);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.4);
+  box-shadow: 0 0 18px rgba(229, 62, 62, 0.75);
+  animation: lock-pulse 1.3s infinite ease-in-out;
+}
+
+.btn-lock-on {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.65rem 1.25rem;
+  border-radius: var(--radius-md, 10px);
+  font-size: 0.88rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  background: rgba(255, 107, 53, 0.08);
+  color: #ff9800;
+  border: 1px solid rgba(255, 152, 0, 0.4);
+  transition: all 0.25s ease;
+}
+
+.btn-lock-on:hover {
+  background: rgba(255, 107, 53, 0.2);
+  border-color: #ff9800;
+  color: #fff;
+  box-shadow: 0 0 16px rgba(255, 152, 0, 0.35);
+  transform: translateY(-1px);
+}
+
+.btn-lock-on.locked-active {
+  background: linear-gradient(135deg, #e53e3e 0%, #c53030 100%);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.4);
+  box-shadow: 0 0 22px rgba(229, 62, 62, 0.75);
+  animation: lock-pulse 1.3s infinite ease-in-out;
+}
+
+.heating-pill.locked-on {
+  background: linear-gradient(135deg, #9b2c2c 0%, #e53e3e 50%, #dd6b20 100%) !important;
+  border-color: #fca5a5 !important;
+  box-shadow: 0 0 24px rgba(229, 62, 62, 0.85), inset 0 0 8px rgba(255, 255, 255, 0.4) !important;
+  animation: lock-pulse 1.2s infinite ease-in-out !important;
+}
+
+@keyframes lock-pulse {
+  0%, 100% {
+    box-shadow: 0 0 14px rgba(229, 62, 62, 0.5);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 26px rgba(239, 68, 68, 0.9);
+    transform: scale(1.02);
+  }
+}
+
 /* ===== HERO INFO ===== */
 .hero-info {
   display: flex;
